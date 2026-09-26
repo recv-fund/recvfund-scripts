@@ -1080,7 +1080,7 @@ do_install() {
   fetch_images
   run_migrations
   start_services
-  wait_healthy || true
+  wait_healthy
   print_done
 }
 
@@ -1097,7 +1097,7 @@ do_update() {
   fetch_images
   run_migrations
   start_services
-  wait_healthy || true
+  wait_healthy
   say ""
   say "${C_GREEN}${C_BOLD}recv.fund updated${C_RESET}  ${SITE_URL}"
 }
@@ -1109,7 +1109,7 @@ do_restart() {
   ensure_docker
   info "Restarting services"
   compose restart
-  wait_healthy || true
+  wait_healthy
   say "${C_GREEN}${C_BOLD}recv.fund restarted${C_RESET}  ${SITE_URL}"
 }
 

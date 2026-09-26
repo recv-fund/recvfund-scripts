@@ -34,7 +34,8 @@ Verification:
 ```bash
 bash -n install.sh update.sh test/dry-run.sh
 bash test/dry-run.sh
-shellcheck install.sh update.sh test/dry-run.sh
+bash test/health-result.sh
+shellcheck -x install.sh update.sh test/*.sh
 ```
 
 The dry-run writes only a unique temporary directory and removes it on exit.
@@ -42,8 +43,9 @@ Docker commands are printed. It checks fresh install, update/restart/status,
 secret preservation/redaction, permissions, platform restrictions, and embedded
 template parity against the sibling server. Set `RECVFUND_SERVER_DIR` to use a
 different checkout, `BASH_BIN` to choose Bash, or `RECV_TEST_DIR` to choose the
-parent temporary directory. Syntax, dry-run and shellcheck pass. Actual Docker
-installation verification is underway; these checks alone do not prove startup.
+parent temporary directory. Syntax, dry-run, health-failure regression and
+shellcheck pass. Install/update/restart exit nonzero if API health never succeeds.
+Actual Docker startup is not yet verified.
 
 ## Handover rule
 

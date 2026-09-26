@@ -49,3 +49,8 @@ The source build override sets the checkout context and public API path.
 The installer can be sourced in a disposable Bash process to load template
 renderers without parsing flags or running operations. The dry-run uses this
 path, so heredoc contents are parsed by Bash rather than extracted as fragments.
+
+
+Install, update and restart return a failure if the API health wait expires. A
+success banner is printed only after that wait succeeds. The regression script
+`test/health-result.sh` checks each operation with a failed health response.
