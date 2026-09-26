@@ -54,3 +54,11 @@ path, so heredoc contents are parsed by Bash rather than extracted as fragments.
 Install, update and restart return a failure if the API health wait expires. A
 success banner is printed only after that wait succeeds. The regression script
 `test/health-result.sh` checks each operation with a failed health response.
+
+
+The Docker smoke harness is committed for continuation, but has not passed end
+to end. It calls the real install operation after loading the installer with
+isolated fixture state, a loopback URL/port and a unique Compose project name.
+It does not test interactive prompts, public release image availability, TLS
+issuance, external PostgreSQL or public-network payments. The initial run was
+intentionally cancelled during dependency installation when the user paused.

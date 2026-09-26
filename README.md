@@ -47,6 +47,17 @@ parent temporary directory. Syntax, dry-run, health-failure regression and
 shellcheck pass. Install/update/restart exit nonzero if API health never succeeds.
 Actual Docker startup is not yet verified.
 
+## Real Docker verification (pending)
+
+Run `bash test/docker-smoke.sh` with a running Docker daemon. It builds the
+sibling server, uses a unique Compose project and loopback port 18090, runs
+migrations, checks API/signup, replaces the API container to check upload
+persistence, and replays migrations. Set `RECV_SMOKE_PORT` to change the port.
+It removes its containers, volumes and temporary directory on exit. Downloaded
+base images and build cache remain reusable. It creates no owner or live payment
+configuration. The last run was cancelled at the user’s pause request during
+image dependency installation; no startup checks ran. Rerun from the beginning.
+
 ## Handover rule
 
 Before finishing: commit small conventional changes as the global git author
