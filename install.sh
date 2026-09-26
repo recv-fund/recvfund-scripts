@@ -249,6 +249,7 @@ set_action() {
   ACTION="$1"
 }
 
+parse_args() {
 while [ $# -gt 0 ]; do
   arg="$1"
   val=""
@@ -316,6 +317,8 @@ if [ -n "$SOURCE" ]; then
     *) SOURCE="$(cd "$SOURCE" && pwd)" ;;
   esac
 fi
+
+}
 
 # ---------------------------------------------------------------------------
 # Environment checks
@@ -824,6 +827,7 @@ services:
       REDIS_PASSWORD: ${REDIS_PASSWORD}
     volumes:
       - api-logs:/repo/apps/api/logs
+      - api-uploads:/repo/apps/api/uploads
     depends_on:
       redis:
         condition: service_healthy
@@ -879,6 +883,7 @@ volumes:
   postgres-data:
   redis-data:
   api-logs:
+  api-uploads:
 EOF
 }
 
@@ -1184,6 +1189,8 @@ menu() {
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
+main() {
+parse_args "$@"
 banner
 if [ "$ASSUME_YES" = 1 ] && [ "$TTY_OK" = 0 ]; then
   say "Running non-interactively with defaults (--yes)."
@@ -1199,3 +1206,9 @@ case "$ACTION" in
   reset)   do_reset ;;
   status)  do_status ;;
 esac
+}
+
+# Sourcing defines the renderers without parsing arguments or running operations.
+if [ "${BASH_SOURCE[0]}" = "$0" ]; then
+  main "$@"
+fi

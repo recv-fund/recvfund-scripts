@@ -7,12 +7,16 @@
 # Needs bash 4+ on PATH as `bash`, or set BASH_BIN. Set RECVFUND_SERVER_DIR
 # to a recvfund-server checkout to also diff the rendered docker-compose.yml
 # and Caddyfile against the repo copies (defaults to the sibling directory).
+# Assertions use always-successful reporting functions; nested bash and template
+# patterns deliberately contain literal variable syntax.
+# shellcheck disable=SC2015,SC2016
 set -euo pipefail
 
 BASH_BIN="${BASH_BIN:-bash}"
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 INSTALL="$ROOT/install.sh"
-DIR="${RECV_TEST_DIR:-/tmp/recvfund-test}"
+DIR="$(mktemp -d "${RECV_TEST_DIR:-${TMPDIR:-/tmp}}/recvfund-test.XXXXXX")"
+trap 'rm -rf -- "$DIR"' EXIT
 SERVER_DIR="${RECVFUND_SERVER_DIR:-$ROOT/../recvfund-server}"
 failures=0
 
@@ -20,10 +24,10 @@ pass() { printf '  ok   %s\n' "$*"; }
 fail() { printf '  FAIL %s\n' "$*"; failures=$((failures + 1)); }
 
 assert_grep() { # assert_grep <file> <regex> <label>
-  if grep -Eq -- "$2" "$1"; then pass "$3"; else fail "$3 (pattern '$2' not in $1)"; fi
+  if grep -Eq -- "$2" "$1"; then pass "$3"; else fail "$3 (expected pattern missing)"; fi
 }
 assert_not_grep() {
-  if grep -Eq -- "$2" "$1"; then fail "$3 (pattern '$2' found in $1)"; else pass "$3"; fi
+  if grep -Eq -- "$2" "$1"; then fail "$3 (unexpected pattern present)"; else pass "$3"; fi
 }
 
 run_installer() { # run_installer <output-file> <args...>
@@ -39,8 +43,6 @@ if [ "$major" -lt 4 ]; then
   exit 1
 fi
 
-rm -rf "$DIR"
-mkdir -p "$DIR"
 OUT1="$DIR/run1.out"
 
 printf 'Fresh install, testnet, bundled db, plain HTTP on 8080\n'
@@ -142,7 +144,7 @@ else
   assert_not_grep "$OUT4" "p#ss" "external password not printed"
   assert_grep "$DIR2/docker-compose.yml" "^      - '443:443/udp'$" "443 mapping kept in LE mode"
   assert_grep "$DIR2/Caddyfile" 'email \{\$ACME_EMAIL\}' "Caddyfile keeps the email option in LE mode"
-  assert_not_grep "$OUT4" -- "--profile db" "no db profile with an external database"
+  assert_not_grep "$OUT4" "--profile db" "no db profile with an external database"
   assert_grep "$OUT4" "pg_isready -h db.internal -p 5433 -U shop -d shop" "pg_isready connectivity test"
   if [ -d "$SERVER_DIR/apps/api" ]; then
     diff -q "$DIR2/docker-compose.yml" "$SERVER_DIR/docker-compose.prod.yml" >/dev/null && pass "docker-compose.yml identical to repo" || fail "docker-compose.yml differs from repo"
@@ -159,9 +161,8 @@ if [ -d "$SERVER_DIR/apps/api" ]; then
   mkdir -p "$tmp"
   "$BASH_BIN" -c '
     set -euo pipefail
+    source "$1"
     SSL_MODE=letsencrypt; HTTP_PORT=80
-    eval "$(sed -n "/^render_compose() {/,/^}/p" "$1")"
-    eval "$(sed -n "/^render_caddyfile() {/,/^}/p" "$1")"
     render_compose > "$2/docker-compose.yml"
     render_caddyfile > "$2/Caddyfile"
   ' _ "$INSTALL" "$tmp"
