@@ -6,7 +6,7 @@ and Redis, runs migrations/seeds, then starts the API, dashboard and checkout.
 
 Requires Bash 4+, Docker Compose 2+, curl and openssl. Linux supports automatic
 HTTPS with a domain; macOS supports local HTTP testing with Docker Desktop.
-The image-pull path expects published `ghcr.io/recvfund/recvfund-{api,web}` images.
+The image-pull path expects published `ghcr.io/recv-fund/recvfund-{api,web}` images.
 Until release images are available, build the sibling server checkout:
 
 ```bash

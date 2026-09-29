@@ -721,7 +721,7 @@ print_summary() {
   if [ -n "$SOURCE" ]; then
     say "  Images:        built from $SOURCE"
   else
-    say "  Images:        ghcr.io/recvfund/recvfund-api and recvfund-web, tag ${IMAGE_TAG:-latest}"
+    say "  Images:        ghcr.io/recv-fund/recvfund-api and recvfund-web, tag ${IMAGE_TAG:-latest}"
   fi
   say "  Secrets:       generated (written only to $DIR/.env)"
   say ""
@@ -806,7 +806,7 @@ services:
       - api
 
   api:
-    image: ghcr.io/recvfund/recvfund-api:${IMAGE_TAG:-latest}
+    image: ghcr.io/recv-fund/recvfund-api:${IMAGE_TAG:-latest}
     restart: unless-stopped
     environment:
       NODE_ENV: production
@@ -838,7 +838,7 @@ services:
       retries: 3
 
   web:
-    image: ghcr.io/recvfund/recvfund-web:${IMAGE_TAG:-latest}
+    image: ghcr.io/recv-fund/recvfund-web:${IMAGE_TAG:-latest}
     restart: unless-stopped
     environment:
       NODE_ENV: production

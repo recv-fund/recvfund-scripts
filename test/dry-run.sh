@@ -74,8 +74,8 @@ assert_grep "$DIR/.env" "^IMAGE_TAG=latest$" "IMAGE_TAG is latest"
 
 assert_grep "$DIR/docker-compose.yml" "^      - '8080:80'$" "caddy maps host port 8080"
 assert_not_grep "$DIR/docker-compose.yml" "443" "no 443 mapping in HTTP mode"
-assert_grep "$DIR/docker-compose.yml" "ghcr.io/recvfund/recvfund-api:\\\$\\{IMAGE_TAG:-latest\\}" "api image reference"
-assert_grep "$DIR/docker-compose.yml" "ghcr.io/recvfund/recvfund-web:\\\$\\{IMAGE_TAG:-latest\\}" "web image reference"
+assert_grep "$DIR/docker-compose.yml" "ghcr.io/recv-fund/recvfund-api:\\\$\\{IMAGE_TAG:-latest\\}" "api image reference"
+assert_grep "$DIR/docker-compose.yml" "ghcr.io/recv-fund/recvfund-web:\\\$\\{IMAGE_TAG:-latest\\}" "web image reference"
 assert_grep "$DIR/docker-compose.yml" "profiles: \\['db'\\]" "postgres service has the db profile"
 assert_grep "$DIR/docker-compose.yml" "node dist|api:" "api service present"
 
