@@ -56,9 +56,11 @@ success banner is printed only after that wait succeeds. The regression script
 `test/health-result.sh` checks each operation with a failed health response.
 
 
-The Docker smoke harness is committed for continuation, but has not passed end
-to end. It calls the real install operation after loading the installer with
-isolated fixture state, a loopback URL/port and a unique Compose project name.
+The Docker smoke harness (`test/docker-smoke.sh`) calls the real install
+operation after loading the installer with isolated fixture state, a loopback
+URL/port and a unique Compose project name. It passed end to end on 2026-09-29
+against a source build of the sibling server: image build, bundled
+PostgreSQL/Redis startup, migrations and seeds, API health, the signup page,
+upload persistence across API container replacement, and migration replay.
 It does not test interactive prompts, public release image availability, TLS
-issuance, external PostgreSQL or public-network payments. The initial run was
-intentionally cancelled during dependency installation when the user paused.
+issuance, external PostgreSQL or public-network payments.

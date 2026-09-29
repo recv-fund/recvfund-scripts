@@ -45,18 +45,23 @@ template parity against the sibling server. Set `RECVFUND_SERVER_DIR` to use a
 different checkout, `BASH_BIN` to choose Bash, or `RECV_TEST_DIR` to choose the
 parent temporary directory. Syntax, dry-run, health-failure regression and
 shellcheck pass. Install/update/restart exit nonzero if API health never succeeds.
-Actual Docker startup is not yet verified.
 
-## Real Docker verification (pending)
+## Real Docker verification
 
 Run `bash test/docker-smoke.sh` with a running Docker daemon. It builds the
-sibling server, uses a unique Compose project and loopback port 18090, runs
-migrations, checks API/signup, replaces the API container to check upload
-persistence, and replays migrations. Set `RECV_SMOKE_PORT` to change the port.
-It removes its containers, volumes and temporary directory on exit. Downloaded
-base images and build cache remain reusable. It creates no owner or live payment
-configuration. The last run was cancelled at the user’s pause request during
-image dependency installation; no startup checks ran. Rerun from the beginning.
+sibling server with the real Dockerfiles, uses a unique Compose project and
+loopback port 18090, runs migrations and seeds, checks API health and the signup
+page, replaces the API container to check upload persistence, and replays
+migrations against the running install. Set `RECV_SMOKE_PORT` to change the
+port and `RECVFUND_SERVER_DIR` to build a different checkout. It removes its
+containers, volumes and temporary directory on exit. Downloaded base images and
+build cache remain reusable. It creates no owner or live payment configuration.
+
+Last passing run: 2026-09-29 on macOS with Docker Desktop, source build of the
+sibling server at `e15ae11` (11 migrations, 7 seeds, API healthy in 3 s,
+migration replay reported nothing pending). It does not cover interactive
+prompts, published release images, TLS issuance, external PostgreSQL, updates
+between image tags, or public-network payments.
 
 ## Handover rule
 
