@@ -35,7 +35,12 @@ server's PlatformConfig table. See its `docs/PLATFORM_CONFIG_KEYS.md`; the
 installer adds no runtime config keys. Root setup provisions authentication
 secrets. Never rotate AES_ENCRYPTION_KEY without migrating encrypted data.
 
-Updates preserve `.env`, optionally change `IMAGE_TAG`, fetch/build images,
+Fresh installs write `IMAGE_TAG` equal to the installer's release version
+(`RELEASE_IMAGE_TAG`, which is `SCRIPT_VERSION`). `--update` sets it to the
+running installer's release unless `--image-tag` is given, and refuses to lower
+a newer semantic version that is already installed.
+
+Updates preserve `.env`, set `IMAGE_TAG` as above, fetch/build images,
 run pending migrations/seeds and restart services. They do not migrate custom
 Compose/Caddy templates. Review template changes when upgrading. Native/token
 watchers require configured programs and appropriate RPC providers; an installer
@@ -62,5 +67,8 @@ URL/port and a unique Compose project name. It passed end to end on 2026-09-29
 against a source build of the sibling server: image build, bundled
 PostgreSQL/Redis startup, migrations and seeds, API health, the signup page,
 upload persistence across API container replacement, and migration replay.
-It does not test interactive prompts, public release image availability, TLS
-issuance, external PostgreSQL or public-network payments.
+With `RECV_SMOKE_IMAGE_TAG=X.Y.Z` it skips the source build: it first runs
+`test/published-images.sh` (anonymous registry token, multi-arch manifest for
+amd64 and arm64) and then installs from the published images. It does not
+test interactive prompts, TLS issuance, external PostgreSQL or public-network
+payments.

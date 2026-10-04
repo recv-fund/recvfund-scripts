@@ -1,67 +1,107 @@
-# recvfund-scripts
+# recv.fund installer
 
-Installer and update wrapper for the self-hosted recv.fund stack. The installer
-writes Docker Compose, Caddy and environment configuration, starts PostgreSQL
-and Redis, runs migrations/seeds, then starts the API, dashboard and checkout.
+Installs recv.fund, self-hosted non-custodial stablecoin payment software, on
+a server you control. One command writes a Docker Compose project with Caddy,
+the recv.fund API and dashboard, Redis and PostgreSQL, runs the database
+migrations and starts everything. The images are public on GitHub Container
+Registry; nothing is built on your server.
 
-Requires Bash 4+, Docker Compose 2+, curl and openssl. Linux supports automatic
-HTTPS with a domain; macOS supports local HTTP testing with Docker Desktop.
-The image-pull path expects published `ghcr.io/recv-fund/recvfund-{api,web}` images.
-Until release images are available, build the sibling server checkout:
+## Install
+
+On a Linux server (Ubuntu, Debian, Linux Mint, CentOS, RHEL, Rocky Linux,
+AlmaLinux, Fedora, Arch or Alpine; amd64 or arm64):
 
 ```bash
-bash install.sh --yes --testnet --http-port 8080 \
-  --dir /absolute/path/to/recvfund-install --source /absolute/path/to/recvfund-server
+curl -fsSL https://github.com/recv-fund/recvfund-scripts/releases/latest/download/install.sh | sudo bash -s -- --testnet
 ```
 
-Open `/signup` on the printed site URL to create the installation owner.
-Programs and merchant registrations must be configured before accepting payments.
-`--testnet` selects Solana devnet and Robinhood testnet; `--mainnet` selects live
-networks. Run `bash install.sh --help` for the complete flags.
+Without flags the script shows a menu and asks for each choice. It installs
+Docker if it is missing, then asks for the network (mainnet or testnet), the
+database (external or bundled PostgreSQL) and HTTPS (Let's Encrypt with a
+domain, or plain HTTP). When it finishes it prints the address of the signup
+page where you create the owner account.
+
+Common unattended installs:
 
 ```bash
-bash install.sh --update --yes --dir /absolute/path/to/recvfund-install
-bash install.sh --restart --yes --dir /absolute/path/to/recvfund-install
-bash install.sh --status --dir /absolute/path/to/recvfund-install
+# Test networks, plain HTTP on port 80
+curl -fsSL https://github.com/recv-fund/recvfund-scripts/releases/latest/download/install.sh | sudo bash -s -- --testnet --yes
+
+# Mainnet with a domain and Let's Encrypt (DNS must point at the server)
+curl -fsSL https://github.com/recv-fund/recvfund-scripts/releases/latest/download/install.sh | sudo bash -s -- \
+  --mainnet --domain pay.example.com --email ops@example.com --yes
 ```
 
-`update.sh` forwards to `install.sh --update`, using the adjacent checkout when
-available. Existing installations preserve their environment and secrets. Source
-build overrides persist across updates. See [operations and configuration](docs/INSTALLATION.md).
+Requirements: 2 CPU cores, 4 GB memory, 20 GB disk recommended (the script
+asks before continuing below 5 GB), ports 80 and 443 free for Let's Encrypt
+or one free port with `--http-port` behind your own proxy, Bash 4 or newer,
+`curl` and `openssl`. macOS with Docker Desktop works for local testing over
+plain HTTP; run the script with Homebrew's Bash (`brew install bash`).
 
-Verification:
+## Versions
+
+Each installer release pins one version of the images,
+`ghcr.io/recv-fund/recvfund-api` and `ghcr.io/recv-fund/recvfund-web`, equal
+to its own version (`install.sh --version`). The URL above always serves the
+newest release; a specific one is at
+`https://github.com/recv-fund/recvfund-scripts/releases/download/vX.Y.Z/install.sh`.
+Every release also carries `SHA256SUMS`:
 
 ```bash
-bash -n install.sh update.sh test/dry-run.sh
-bash test/dry-run.sh
-bash test/health-result.sh
+curl -fsSLO https://github.com/recv-fund/recvfund-scripts/releases/latest/download/install.sh
+curl -fsSLO https://github.com/recv-fund/recvfund-scripts/releases/latest/download/SHA256SUMS
+sha256sum -c SHA256SUMS --ignore-missing
+sudo bash install.sh --testnet
+```
+
+## Operate
+
+```bash
+# Update to the newest release (keeps .env and data, runs migrations)
+curl -fsSL https://github.com/recv-fund/recvfund-scripts/releases/latest/download/install.sh | sudo bash -s -- --update --yes
+
+sudo bash install.sh --status     # containers and API health
+sudo bash install.sh --restart    # restart without changing anything
+sudo bash install.sh --reset      # delete the installation; asks you to type the directory twice
+```
+
+`--update` moves to the images of the installer you run. It refuses to move a
+newer installation back to an older version unless you pass `--image-tag`.
+`update.sh` from the same release is a shortcut for `install.sh --update`.
+Run `bash install.sh --help` for every flag, including an external database
+(`--external-db`, `--pg-*`), `--http-port`, `--image-tag` and `--dir` (default
+`/opt/recvfund`).
+
+Back up `/opt/recvfund/.env` and the database together. `AES_ENCRYPTION_KEY`
+in `.env` decrypts every stored secret, including hot wallet keys, and cannot
+be recovered. Operations and configuration details:
+[docs/INSTALLATION.md](docs/INSTALLATION.md). Full documentation:
+https://docs.recv.fund.
+
+## Develop and verify
+
+```bash
+bash -n install.sh update.sh test/*.sh
 shellcheck -x install.sh update.sh test/*.sh
+bash test/dry-run.sh                 # prints Docker commands instead of running them
+bash test/health-result.sh           # install/update/restart fail when the API is unhealthy
+bash test/docker-smoke.sh            # real install from a sibling recvfund-server checkout
+RECV_SMOKE_IMAGE_TAG=0.1.0 bash test/docker-smoke.sh   # real install from the published images
+bash test/published-images.sh 0.1.0  # the images can be pulled without credentials
 ```
 
-The dry-run writes only a unique temporary directory and removes it on exit.
-Docker commands are printed. It checks fresh install, update/restart/status,
-secret preservation/redaction, permissions, platform restrictions, and embedded
-template parity against the sibling server. Set `RECVFUND_SERVER_DIR` to use a
-different checkout, `BASH_BIN` to choose Bash, or `RECV_TEST_DIR` to choose the
-parent temporary directory. Syntax, dry-run, health-failure regression and
-shellcheck pass. Install/update/restart exit nonzero if API health never succeeds.
+The dry run writes only a temporary directory. With a sibling
+`recvfund-server` checkout (or `RECVFUND_SERVER_DIR`) it also checks that the
+embedded Compose file, Caddyfile and `.env` layout match the server's
+`docker-compose.prod.yml`, `deploy/Caddyfile` and `deploy/.env.example`.
+`test/docker-smoke.sh` needs a Docker daemon; it uses a unique Compose
+project on loopback port 18090 (`RECV_SMOKE_PORT`), creates no owner, and
+removes its containers, volumes and temporary directory on exit.
+`--source <recvfund-server checkout>` builds the images locally instead of
+pulling them.
 
-## Real Docker verification
-
-Run `bash test/docker-smoke.sh` with a running Docker daemon. It builds the
-sibling server with the real Dockerfiles, uses a unique Compose project and
-loopback port 18090, runs migrations and seeds, checks API health and the signup
-page, replaces the API container to check upload persistence, and replays
-migrations against the running install. Set `RECV_SMOKE_PORT` to change the
-port and `RECVFUND_SERVER_DIR` to build a different checkout. It removes its
-containers, volumes and temporary directory on exit. Downloaded base images and
-build cache remain reusable. It creates no owner or live payment configuration.
-
-Last passing run: 2026-09-29 on macOS with Docker Desktop, source build of the
-sibling server at `e15ae11` (11 migrations, 7 seeds, API healthy in 3 s,
-migration replay reported nothing pending). It does not cover interactive
-prompts, published release images, TLS issuance, external PostgreSQL, updates
-between image tags, or public-network payments.
+GitHub Actions runs the static checks on every push (`ci.yml`) and publishes
+releases from version tags (`release.yml`). See [RELEASING.md](RELEASING.md).
 
 ## Handover rule
 
