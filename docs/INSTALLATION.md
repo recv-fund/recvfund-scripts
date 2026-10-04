@@ -44,10 +44,15 @@ server's PlatformConfig table. See its `docs/PLATFORM_CONFIG_KEYS.md`; the
 installer adds no runtime config keys. Root setup provisions authentication
 secrets. Never rotate AES_ENCRYPTION_KEY without migrating encrypted data.
 
-Fresh installs write `IMAGE_TAG` equal to the installer's release version
-(`RELEASE_IMAGE_TAG`, which is `SCRIPT_VERSION`). `--update` sets it to the
-running installer's release unless `--image-tag` is given, and refuses to lower
-a newer semantic version that is already installed.
+Fresh installs and `--update` write `IMAGE_TAG` as the newest `X.Y.Z` that both
+images have on GHCR (`latest_release`: anonymous pull token, tag list, highest
+version present for api and web), unless `--image-tag` is given. If the lookup
+fails, the installer stops and asks for `--image-tag`. `--update` refuses to
+lower a newer installed version, which can only happen if a release was
+removed. Installs built with `--source` keep their tag (`local` by default).
+`RECV_LATEST_RELEASE` replaces the lookup in tests. `SCRIPT_VERSION` is `dev`
+on `main`; the release workflow writes the release version into the
+published asset.
 
 Updates preserve `.env`, set `IMAGE_TAG` as above, fetch/build images,
 run pending migrations/seeds and restart services. They do not migrate custom

@@ -40,10 +40,15 @@ plain HTTP; run the script with Homebrew's Bash (`brew install bash`).
 
 ## Versions
 
-Each installer release pins one version of the images,
-`ghcr.io/recv-fund/recvfund-api` and `ghcr.io/recv-fund/recvfund-web`, equal
-to its own version (`install.sh --version`). The URL above always serves the
-newest release; a specific one is at
+Every merge to `main` of `recvfund-server` publishes a new version of the
+images `ghcr.io/recv-fund/recvfund-api` and `ghcr.io/recv-fund/recvfund-web`
+(`X.Y.Z`, the previous patch number plus one). A fresh install and `--update`
+look up the newest `X.Y.Z` on GHCR and write it to `.env` as `IMAGE_TAG`;
+`--image-tag` chooses another. A released version is never replaced.
+
+The installer has its own version (`install.sh --version`), and every merge to
+this repository's `main` publishes a new one. The URL above always serves the
+newest installer release; a specific one is at
 `https://github.com/recv-fund/recvfund-scripts/releases/download/vX.Y.Z/install.sh`.
 Every release also carries `SHA256SUMS`:
 
@@ -99,8 +104,8 @@ shellcheck -x install.sh update.sh test/*.sh
 bash test/dry-run.sh                 # prints Docker commands instead of running them
 bash test/health-result.sh           # install/update/restart fail when the API is unhealthy
 bash test/docker-smoke.sh            # real install from a sibling recvfund-server checkout
-RECV_SMOKE_IMAGE_TAG=0.1.1 bash test/docker-smoke.sh   # real install from the published images
-bash test/published-images.sh 0.1.1  # the images can be pulled without credentials
+RECV_SMOKE_IMAGE_TAG=X.Y.Z bash test/docker-smoke.sh   # real install from the published images
+bash test/published-images.sh X.Y.Z  # the images can be pulled without credentials
 ```
 
 The dry run writes only a temporary directory. With a sibling
