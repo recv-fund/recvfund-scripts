@@ -63,11 +63,24 @@ curl -fsSL https://github.com/recv-fund/recvfund-scripts/releases/latest/downloa
 sudo bash install.sh --status     # containers and API health
 sudo bash install.sh --restart    # restart without changing anything
 sudo bash install.sh --reset      # delete the installation; asks you to type the directory twice
+
+# Stop and start the containers, keeping all data (there is no installer flag for this)
+cd /opt/recvfund && sudo docker compose -p recvfund --profile db stop
+cd /opt/recvfund && sudo docker compose -p recvfund --profile db start
 ```
+
+Leave out `--profile db` with an external database; with the bundled database
+it is required, or the Postgres container keeps running.
 
 `--update` moves to the images of the installer you run. It refuses to move a
 newer installation back to an older version unless you pass `--image-tag`.
 `update.sh` from the same release is a shortcut for `install.sh --update`.
+
+For plain HTTP, the suggested site URL uses the address `api.ipify.org`
+reports. Behind a router or in a VM such as Lima, that address doesn't reach
+the server. Answer the prompt with an address your browser can reach
+(`http://localhost` for Lima), or change it after signup under Installation,
+Site URL.
 Run `bash install.sh --help` for every flag, including an external database
 (`--external-db`, `--pg-*`), `--http-port`, `--image-tag` and `--dir` (default
 `/opt/recvfund`).

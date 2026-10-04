@@ -7,6 +7,15 @@ The install directory contains `.env` (mode 600), `docker-compose.yml`,
 
 Compose project name is `recvfund`. The bundled database uses profile `db`.
 Persistent volumes hold PostgreSQL, Redis, API logs/uploads and Caddy state.
+There is no stop operation: `docker compose -p recvfund --profile db stop`
+and `start` in the install directory stop and start every container and keep
+the data. Without `--profile db`, Compose skips the bundled Postgres service,
+so it keeps running. `down -v` deletes the volumes.
+
+The plain-HTTP site URL default is `http://<ip>`, where `<ip>` comes from
+`api.ipify.org` (or `localhost` when that fails). Behind NAT or inside a VM it
+is the router's address and is not reachable; enter a reachable address at the
+prompt or change it under Installation, Site URL after signup.
 Reset deletes this installation's volumes and directory and requires typing the
 directory twice. `--yes` does not supply those destructive confirmations.
 
