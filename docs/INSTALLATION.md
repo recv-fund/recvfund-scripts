@@ -72,3 +72,8 @@ With `RECV_SMOKE_IMAGE_TAG=X.Y.Z` it skips the source build: it first runs
 amd64 and arm64) and then installs from the published images. It does not
 test interactive prompts, TLS issuance, external PostgreSQL or public-network
 payments.
+
+The public command runs the script from a pipe (`curl … | sudo bash -s --`),
+where Bash provides no source file. Release 0.1.0 crashed in that case
+(`BASH_SOURCE[0]: unbound variable`) and was superseded by 0.1.1; the dry run
+now runs both scripts from stdin.

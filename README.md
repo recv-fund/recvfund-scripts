@@ -86,8 +86,8 @@ shellcheck -x install.sh update.sh test/*.sh
 bash test/dry-run.sh                 # prints Docker commands instead of running them
 bash test/health-result.sh           # install/update/restart fail when the API is unhealthy
 bash test/docker-smoke.sh            # real install from a sibling recvfund-server checkout
-RECV_SMOKE_IMAGE_TAG=0.1.0 bash test/docker-smoke.sh   # real install from the published images
-bash test/published-images.sh 0.1.0  # the images can be pulled without credentials
+RECV_SMOKE_IMAGE_TAG=0.1.1 bash test/docker-smoke.sh   # real install from the published images
+bash test/published-images.sh 0.1.1  # the images can be pulled without credentials
 ```
 
 The dry run writes only a temporary directory. With a sibling

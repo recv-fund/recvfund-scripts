@@ -20,7 +20,7 @@ fi
 
 set -euo pipefail
 
-SCRIPT_VERSION="0.1.0"
+SCRIPT_VERSION="0.1.1"
 # Images published with this installer release. Fresh installs and updates
 # run this tag unless --image-tag is given, so an install is reproducible.
 RELEASE_IMAGE_TAG="$SCRIPT_VERSION"
