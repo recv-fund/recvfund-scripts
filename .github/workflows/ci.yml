@@ -1,0 +1,25 @@
+# Static checks for every push and pull request. The Docker smoke test needs
+# a Docker daemon and published images, so it runs locally (README).
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Syntax
+        run: bash -n install.sh update.sh test/*.sh
+      - name: Shellcheck
+        run: shellcheck -x install.sh update.sh test/*.sh
+      - name: Dry run
+        run: bash test/dry-run.sh
+      - name: Health failure regression
+        run: bash test/health-result.sh

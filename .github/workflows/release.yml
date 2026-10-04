@@ -1,0 +1,45 @@
+# Push a tag vX.Y.Z to publish the installer. The release is refused unless
+# SCRIPT_VERSION in install.sh is X.Y.Z and the images it pins,
+# ghcr.io/recv-fund/recvfund-{api,web}:X.Y.Z, can be pulled without
+# credentials for amd64 and arm64. Assets: install.sh, update.sh, SHA256SUMS.
+# The newest release is always served at
+#   https://github.com/recv-fund/recvfund-scripts/releases/latest/download/install.sh
+name: release
+
+on:
+  push:
+    tags: ['v*.*.*']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Version matches the tag
+        run: |
+          version="$(sed -n 's/^SCRIPT_VERSION="\(.*\)"$/\1/p' install.sh)"
+          test "v$version" = "$GITHUB_REF_NAME" || { echo "install.sh is $version but the tag is $GITHUB_REF_NAME"; exit 1; }
+          echo "VERSION=$version" >> "$GITHUB_ENV"
+      - name: Checks
+        run: |
+          bash -n install.sh update.sh test/*.sh
+          shellcheck -x install.sh update.sh test/*.sh
+          bash test/dry-run.sh
+          bash test/health-result.sh
+      - name: Pinned images are public
+        run: bash test/published-images.sh "$VERSION"
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          sha256sum install.sh update.sh > SHA256SUMS
+          {
+            printf 'Installs ghcr.io/recv-fund/recvfund-api:%s and ghcr.io/recv-fund/recvfund-web:%s.\n\n' "$VERSION" "$VERSION"
+            printf '```bash\ncurl -fsSL https://github.com/recv-fund/recvfund-scripts/releases/download/%s/install.sh | sudo bash -s -- --testnet\n```\n\n' "$GITHUB_REF_NAME"
+            printf 'Verify downloaded files with `sha256sum -c SHA256SUMS`.\n'
+          } > notes.md
+          gh release create "$GITHUB_REF_NAME" install.sh update.sh SHA256SUMS \
+            --title "recv.fund installer $VERSION" --notes-file notes.md
