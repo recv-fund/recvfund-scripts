@@ -8,7 +8,7 @@
 set -euo pipefail
 
 INSTALL_URL="${RECV_INSTALL_URL:-https://github.com/recv-fund/recvfund-scripts/releases/latest/download/install.sh}"
-here="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd || true)"
+if here="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)"; then :; else here=""; fi
 
 if [ -n "$here" ] && [ -f "$here/install.sh" ]; then
   exec bash "$here/install.sh" --update "$@"

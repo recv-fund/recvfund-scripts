@@ -247,7 +247,7 @@ compose() {
 # Flag parsing
 # ---------------------------------------------------------------------------
 need_arg() {
-  [ $# -ge 2 ] && [ -n "$2" ] || die "$1 needs a value (see --help)"
+  if [ $# -lt 2 ] || [ -z "$2" ]; then die "$1 needs a value (see --help)"; fi
 }
 
 set_action() {
@@ -312,12 +312,13 @@ if [ "$HTTP_PORT_SET" = 1 ]; then
   case "$HTTP_PORT" in
     ''|*[!0-9]*) die "--http-port must be a number" ;;
   esac
-  [ "$HTTP_PORT" -ge 1 ] && [ "$HTTP_PORT" -le 65535 ] || die "--http-port must be between 1 and 65535"
+  if [ "$HTTP_PORT" -lt 1 ] || [ "$HTTP_PORT" -gt 65535 ]; then die "--http-port must be between 1 and 65535"; fi
 fi
 if [ -n "$SOURCE" ]; then
   SOURCE="${SOURCE%/}"
-  [ -f "$SOURCE/apps/api/Dockerfile" ] && [ -f "$SOURCE/apps/web/Dockerfile" ] \
-    || die "--source must point at a recvfund-server checkout (apps/api/Dockerfile and apps/web/Dockerfile not found under '$SOURCE')"
+  if [ ! -f "$SOURCE/apps/api/Dockerfile" ] || [ ! -f "$SOURCE/apps/web/Dockerfile" ]; then
+    die "--source must point at a recvfund-server checkout (apps/api/Dockerfile and apps/web/Dockerfile not found under '$SOURCE')"
+  fi
   case "$SOURCE" in
     /*) ;;
     *) SOURCE="$(cd "$SOURCE" && pwd)" ;;
