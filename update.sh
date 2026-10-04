@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
-# Runs install.sh --update: pull the latest images, run migrations, restart.
+# Runs install.sh --update: move to that installer release's images, run migrations, restart.
 #
-# Published at https://recv.fund/update.sh:
-#   bash <(curl -fsSL https://recv.fund/update.sh) [--dir <path>] [--image-tag <tag>] [--yes]
+# Published as a GitHub release asset:
+#   bash <(curl -fsSL https://github.com/recv-fund/recvfund-scripts/releases/latest/download/update.sh) [--dir <path>] [--image-tag <tag>] [--yes]
 # Uses the install.sh next to this file when run from a checkout, otherwise
-# fetches it from RECV_INSTALL_URL (default https://recv.fund/install.sh).
+# fetches the latest release's install.sh (override with RECV_INSTALL_URL).
 set -euo pipefail
 
-INSTALL_URL="${RECV_INSTALL_URL:-https://recv.fund/install.sh}"
+INSTALL_URL="${RECV_INSTALL_URL:-https://github.com/recv-fund/recvfund-scripts/releases/latest/download/install.sh}"
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd || true)"
 
 if [ -n "$here" ] && [ -f "$here/install.sh" ]; then

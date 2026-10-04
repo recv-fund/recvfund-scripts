@@ -70,7 +70,8 @@ assert_grep "$DIR/.env" "^ADMIN_API_KEY=[0-9a-f]{48}$" "ADMIN_API_KEY is 48 hex 
 assert_grep "$DIR/.env" "^POSTGRES_PASSWORD=[0-9a-f]{48}$" "POSTGRES_PASSWORD is 48 hex chars"
 assert_grep "$DIR/.env" "^REDIS_PASSWORD=[0-9a-f]{48}$" "REDIS_PASSWORD is 48 hex chars"
 assert_grep "$DIR/.env" "^POSTGRES_HOST=postgres$" "POSTGRES_HOST is the bundled container"
-assert_grep "$DIR/.env" "^IMAGE_TAG=latest$" "IMAGE_TAG is latest"
+release="$(sed -n 's/^SCRIPT_VERSION="\(.*\)"$/\1/p' "$INSTALL")"
+assert_grep "$DIR/.env" "^IMAGE_TAG=${release//./\\.}$" "IMAGE_TAG is the installer release ($release)"
 
 assert_grep "$DIR/docker-compose.yml" "^      - '8080:80'$" "caddy maps host port 8080"
 assert_not_grep "$DIR/docker-compose.yml" "443" "no 443 mapping in HTTP mode"
@@ -108,6 +109,17 @@ printf -- '--update, --restart, --status\n'
 OUT3="$DIR/run3.out"
 run_installer "$OUT3" --update --yes --dir "$DIR" --image-tag v1.2.3
 assert_grep "$DIR/.env" "^IMAGE_TAG=v1.2.3$" "--update --image-tag rewrites IMAGE_TAG"
+run_installer "$OUT3" --update --yes --dir "$DIR"
+assert_grep "$DIR/.env" "^IMAGE_TAG=${release//./\\.}$" "--update without a tag moves to the installer release"
+sed -i.bak 's/^IMAGE_TAG=.*/IMAGE_TAG=99.0.0/' "$DIR/.env" && rm -f "$DIR/.env.bak"
+if RECV_DRY_RUN=1 NO_COLOR=1 "$BASH_BIN" "$INSTALL" --update --yes --dir "$DIR" > "$OUT3" 2>&1 </dev/null; then
+  fail "--update from an older installer must refuse to downgrade"
+else
+  assert_grep "$OUT3" "installation runs 99.0.0" "--update refuses to downgrade a newer release"
+fi
+assert_grep "$DIR/.env" "^IMAGE_TAG=99.0.0$" "refused downgrade leaves IMAGE_TAG unchanged"
+run_installer "$OUT3" --update --yes --dir "$DIR" --image-tag "$release"
+assert_grep "$DIR/.env" "^IMAGE_TAG=${release//./\\.}$" "--image-tag overrides the downgrade guard"
 assert_grep "$OUT3" "--profile db pull" "update pulls"
 assert_grep "$OUT3" "run --rm api node dist/src/db/migrate" "update migrates"
 run_installer "$OUT3" --restart --yes --dir "$DIR"

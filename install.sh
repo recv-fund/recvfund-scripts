@@ -5,20 +5,26 @@
 # /opt/recvfund and starts it with the published images. Run with no flags
 # for the operations menu, or pass --help for the flag list.
 #
-# Published at https://recv.fund/install.sh. Works under
-#   bash <(curl -fsSL https://recv.fund/install.sh) [flags]
-#   curl -fsSL https://recv.fund/install.sh | bash -s -- [flags]
+# Published as a GitHub release asset; the latest release is always at
+#   https://github.com/recv-fund/recvfund-scripts/releases/latest/download/install.sh
+# Works under
+#   bash <(curl -fsSL https://github.com/recv-fund/recvfund-scripts/releases/latest/download/install.sh) [flags]
+#   curl -fsSL https://github.com/recv-fund/recvfund-scripts/releases/latest/download/install.sh | sudo bash -s -- [flags]
 # Prompts read from /dev/tty, never from stdin, so the pipe form is safe.
 
 if [ -z "${BASH_VERSION:-}" ] || [ "${BASH_VERSINFO[0]}" -lt 4 ]; then
   echo "install.sh needs bash 4 or newer (found ${BASH_VERSION:-not bash})." >&2
-  echo "On macOS: brew install bash, then run /opt/homebrew/bin/bash <(curl -fsSL https://recv.fund/install.sh)" >&2
+  echo "On macOS: brew install bash, then run /opt/homebrew/bin/bash <(curl -fsSL https://github.com/recv-fund/recvfund-scripts/releases/latest/download/install.sh)" >&2
   exit 1
 fi
 
 set -euo pipefail
 
 SCRIPT_VERSION="0.1.0"
+# Images published with this installer release. Fresh installs and updates
+# run this tag unless --image-tag is given, so an install is reproducible.
+RELEASE_IMAGE_TAG="$SCRIPT_VERSION"
+INSTALL_URL="https://github.com/recv-fund/recvfund-scripts/releases/latest/download/install.sh"
 PROJECT="recvfund"
 DEFAULT_DIR="/opt/recvfund"
 HEALTH_TIMEOUT=90
@@ -98,7 +104,7 @@ Usage: install.sh [operation] [options]
 Operations (no operation shows a menu):
   --mainnet             Fresh install on mainnet
   --testnet             Fresh install on testnet (recommended for a first install)
-  --update              Pull the latest images, run migrations, restart
+  --update              Move to this installer's release images, run migrations, restart
   --restart             Restart the services without touching data
   --reset               Remove containers, images, volumes and the install directory
   --status              Show container status and the health endpoint
@@ -115,7 +121,7 @@ Options:
   --pg-password <pw>    External Postgres password (visible in the process list; prefer the prompt)
   --pg-ssl              Connect to the external Postgres with SSL
   --http-port <n>       Serve plain HTTP on this host port (behind your own proxy)
-  --image-tag <tag>     Image tag to run (default latest)
+  --image-tag <tag>     Image tag to run (default ${RELEASE_IMAGE_TAG}, this installer's release)
   --dir <path>          Install directory (default ${DEFAULT_DIR})
   --source <path>       Build the images from a local recvfund-server checkout instead of pulling
   -h, --help            Show this help
@@ -496,7 +502,7 @@ valid_port() {
 # ---------------------------------------------------------------------------
 ensure_dir() {
   if [ -d "$DIR" ]; then
-    [ -w "$DIR" ] || die "$DIR exists but is not writable by $(id -un). Run as root: sudo bash -c \"\$(curl -fsSL https://recv.fund/install.sh)\" -- <flags>"
+    [ -w "$DIR" ] || die "$DIR exists but is not writable by $(id -un). Run as root: curl -fsSL $INSTALL_URL | sudo bash -s -- <flags>"
   else
     if ! mkdir -p "$DIR" 2>/dev/null; then
       [ -n "$SUDO" ] || die "Cannot create $DIR. Run as root or choose another --dir."
@@ -721,7 +727,7 @@ print_summary() {
   if [ -n "$SOURCE" ]; then
     say "  Images:        built from $SOURCE"
   else
-    say "  Images:        ghcr.io/recv-fund/recvfund-api and recvfund-web, tag ${IMAGE_TAG:-latest}"
+    say "  Images:        ghcr.io/recv-fund/recvfund-api and recvfund-web, tag ${IMAGE_TAG:-$RELEASE_IMAGE_TAG}"
   fi
   say "  Secrets:       generated (written only to $DIR/.env)"
   say ""
@@ -764,7 +770,7 @@ POSTGRES_SSL=${PG_SSL}
 REDIS_PASSWORD=${REDIS_PASSWORD}
 
 SEND_WEBHOOKS=true
-IMAGE_TAG=${IMAGE_TAG:-latest}
+IMAGE_TAG=${IMAGE_TAG:-$RELEASE_IMAGE_TAG}
 EOF
 }
 
@@ -1084,15 +1090,31 @@ do_install() {
   print_done
 }
 
+# True when $1 is a newer release version than $2 (both X.Y.Z).
+version_newer() {
+  [ "$1" != "$2" ] && [ "$(printf '%s\n%s\n' "$1" "$2" | sort -t. -k1,1n -k2,2n -k3,3n | tail -n 1)" = "$1" ]
+}
+
+# An update moves to this installer's release unless --image-tag is given.
+# It refuses to move a newer release back to an older one.
+choose_update_tag() {
+  local current
+  [ -n "$IMAGE_TAG" ] && return 0
+  current="$(env_value IMAGE_TAG)"
+  if [[ "$current" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] && version_newer "$current" "$RELEASE_IMAGE_TAG"; then
+    die "This installer is v$SCRIPT_VERSION but the installation runs $current. Download the latest installer from $INSTALL_URL, or pass --image-tag to choose a version."
+  fi
+  IMAGE_TAG="$RELEASE_IMAGE_TAG"
+}
+
 do_update() {
   detect_os
   load_existing
   ensure_dir
   ensure_docker
-  if [ -n "$IMAGE_TAG" ]; then
-    set_env_value IMAGE_TAG "$IMAGE_TAG"
-    say "IMAGE_TAG set to $IMAGE_TAG"
-  fi
+  choose_update_tag
+  set_env_value IMAGE_TAG "$IMAGE_TAG"
+  say "IMAGE_TAG set to $IMAGE_TAG"
   write_build_override
   fetch_images
   run_migrations
@@ -1169,7 +1191,7 @@ menu() {
   local choice
   say "Operations"
   say "  1) fresh install"
-  say "  2) update to the latest images"
+  say "  2) update to this installer's release (${RELEASE_IMAGE_TAG})"
   say "  3) restart services"
   say "  4) reset (remove containers, images and data)"
   say "  5) show status"
