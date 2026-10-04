@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
-# Real, disposable source-build installation. Requires a running Docker daemon.
+# Real, disposable installation. Requires a running Docker daemon.
 # No owner, RPC program, SMTP recipient or webhook endpoint is configured.
+#
+# Default: builds the images from the sibling recvfund-server checkout.
+# RECV_SMOKE_IMAGE_TAG=<version>: pulls the published images of that version
+# from ghcr.io instead, after checking they can be fetched without credentials.
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SERVER_DIR="${RECVFUND_SERVER_DIR:-$ROOT/../recvfund-server}"
@@ -24,13 +28,18 @@ source "$ROOT/install.sh"
 # install operation as the CLI. It does not alter the merchant default project.
 PROJECT="$SMOKE_PROJECT"
 DIR="$SMOKE_DIR"
-SOURCE="$(cd "$SERVER_DIR" && pwd)"
+if [ -n "${RECV_SMOKE_IMAGE_TAG:-}" ]; then
+  SOURCE=""
+  bash "$ROOT/test/published-images.sh" "$RECV_SMOKE_IMAGE_TAG"
+else
+  SOURCE="$(cd "$SERVER_DIR" && pwd)"
+fi
 ACTION=install
 ASSUME_YES=1
 NETWORK=testnet
 HTTP_PORT="$SMOKE_PORT"
 HTTP_PORT_SET=1
-IMAGE_TAG="$SMOKE_PROJECT"
+IMAGE_TAG="${RECV_SMOKE_IMAGE_TAG:-$SMOKE_PROJECT}"
 public_ip() { printf localhost; }
 # install.sh sets an EXIT logger; the fixture owns cleanup for this process.
 trap cleanup EXIT
@@ -47,4 +56,5 @@ wait_healthy
 compose exec -T api node -e 'if(require("fs").readFileSync("uploads/smoke-persistence.txt", "utf8") !== "retained") process.exit(1)'
 # Replaying migrations must succeed against the running install.
 run_migrations
-printf 'Docker smoke passed: source build, migrations/seeds, API health, signup, uploads persistence and migration replay.\n'
+printf 'Docker smoke passed (%s): migrations/seeds, API health, signup, uploads persistence and migration replay.\n' \
+  "${RECV_SMOKE_IMAGE_TAG:+published images $RECV_SMOKE_IMAGE_TAG}${RECV_SMOKE_IMAGE_TAG:-source build}"
