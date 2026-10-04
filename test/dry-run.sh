@@ -53,7 +53,8 @@ run_installer "$OUT1" --yes --testnet --dir "$DIR" --http-port 8080
 [ -f "$DIR/Caddyfile" ] && pass "Caddyfile written" || fail "Caddyfile missing"
 [ -f "$DIR/install.log" ] && pass "install.log written" || fail "install.log missing"
 
-perm="$(stat -f '%Lp' "$DIR/.env" 2>/dev/null || stat -c '%a' "$DIR/.env")"
+# GNU stat -f prints filesystem status, so pick the syntax by platform.
+if [ "$(uname -s)" = Darwin ]; then perm="$(stat -f '%Lp' "$DIR/.env")"; else perm="$(stat -c '%a' "$DIR/.env")"; fi
 [ "$perm" = 600 ] && pass ".env mode 600" || fail ".env mode is $perm"
 
 for key in SITE_DOMAIN ACME_EMAIL SITE_URL NETWORK_TYPE AES_ENCRYPTION_KEY ADMIN_API_KEY \
