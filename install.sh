@@ -1232,6 +1232,8 @@ esac
 }
 
 # Sourcing defines the renderers without parsing arguments or running operations.
-if [ "${BASH_SOURCE[0]}" = "$0" ]; then
+# Piped into bash (curl ... | bash) there is no source file, so BASH_SOURCE is
+# empty: that is an execution, not a source.
+if [ -z "${BASH_SOURCE[0]:-}" ] || [ "${BASH_SOURCE[0]}" = "$0" ]; then
   main "$@"
 fi
