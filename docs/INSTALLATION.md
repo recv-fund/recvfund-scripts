@@ -22,6 +22,10 @@ directory twice. `--yes` does not supply those destructive confirmations.
 For Linux HTTPS, supply `--domain` and `--email`, with DNS directed to the
 server and ports 80/443 available. `--http-port` selects plain HTTP for local
 use or a separate reverse proxy; it cannot be combined with `--domain`.
+`--http-bind <IPv4>` publishes that port on one address only (the Compose
+mapping becomes `'<ip>:<port>:80'`, and updates read it back), for a proxy on
+the same host; Docker's published ports are not filtered by `ufw`.
+`--site-url <url>` sets `SITE_URL` in plain-HTTP mode without the prompt.
 
 External PostgreSQL uses `--external-db` and `--pg-host`, `--pg-port`,
 `--pg-db`, `--pg-user`, optional `--pg-ssl`, and a password prompt. The
