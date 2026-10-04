@@ -20,10 +20,12 @@ fi
 
 set -euo pipefail
 
-SCRIPT_VERSION="0.1.1"
-# Images published with this installer release. Fresh installs and updates
-# run this tag unless --image-tag is given, so an install is reproducible.
-RELEASE_IMAGE_TAG="$SCRIPT_VERSION"
+# The release workflow replaces "dev" with the installer's version in the
+# published asset. Image versions are separate: every release of
+# recvfund-server publishes a new X.Y.Z, and fresh installs and updates look up
+# the newest one (latest_release) and write it to .env as IMAGE_TAG.
+SCRIPT_VERSION="dev"
+REGISTRY_REPO="recv-fund/recvfund"
 INSTALL_URL="https://github.com/recv-fund/recvfund-scripts/releases/latest/download/install.sh"
 PROJECT="recvfund"
 DEFAULT_DIR="/opt/recvfund"
@@ -104,7 +106,7 @@ Usage: install.sh [operation] [options]
 Operations (no operation shows a menu):
   --mainnet             Fresh install on mainnet
   --testnet             Fresh install on testnet (recommended for a first install)
-  --update              Move to this installer's release images, run migrations, restart
+  --update              Move to the newest released version, run migrations, restart
   --restart             Restart the services without touching data
   --reset               Remove containers, images, volumes and the install directory
   --status              Show container status and the health endpoint
@@ -121,7 +123,7 @@ Options:
   --pg-password <pw>    External Postgres password (visible in the process list; prefer the prompt)
   --pg-ssl              Connect to the external Postgres with SSL
   --http-port <n>       Serve plain HTTP on this host port (behind your own proxy)
-  --image-tag <tag>     Image tag to run (default ${RELEASE_IMAGE_TAG}, this installer's release)
+  --image-tag <tag>     Image version to run (default: the newest released X.Y.Z)
   --dir <path>          Install directory (default ${DEFAULT_DIR})
   --source <path>       Build the images from a local recvfund-server checkout instead of pulling
   -h, --help            Show this help
@@ -728,7 +730,7 @@ print_summary() {
   if [ -n "$SOURCE" ]; then
     say "  Images:        built from $SOURCE"
   else
-    say "  Images:        ghcr.io/recv-fund/recvfund-api and recvfund-web, tag ${IMAGE_TAG:-$RELEASE_IMAGE_TAG}"
+    say "  Images:        ghcr.io/recv-fund/recvfund-api and recvfund-web, version $IMAGE_TAG"
   fi
   say "  Secrets:       generated (written only to $DIR/.env)"
   say ""
@@ -771,7 +773,7 @@ POSTGRES_SSL=${PG_SSL}
 REDIS_PASSWORD=${REDIS_PASSWORD}
 
 SEND_WEBHOOKS=true
-IMAGE_TAG=${IMAGE_TAG:-$RELEASE_IMAGE_TAG}
+IMAGE_TAG=${IMAGE_TAG}
 EOF
 }
 
@@ -1082,6 +1084,7 @@ do_install() {
   choose_database
   choose_ssl
   generate_secrets
+  choose_install_tag
   print_summary
   write_files
   fetch_images
@@ -1096,16 +1099,70 @@ version_newer() {
   [ "$1" != "$2" ] && [ "$(printf '%s\n%s\n' "$1" "$2" | sort -t. -k1,1n -k2,2n -k3,3n | tail -n 1)" = "$1" ]
 }
 
-# An update moves to this installer's release unless --image-tag is given.
-# It refuses to move a newer release back to an older one.
+# Prints the newest X.Y.Z that both images have on GHCR. The packages are
+# public, so an anonymous pull token can list their tags. RECV_LATEST_RELEASE
+# replaces the lookup in tests.
+latest_release() {
+  local app token tags versions="" found
+  if [ -n "${RECV_LATEST_RELEASE:-}" ]; then
+    printf '%s\n' "$RECV_LATEST_RELEASE"
+    return 0
+  fi
+  for app in api web; do
+    token="$(curl -fsS --max-time 15 "https://ghcr.io/token?scope=repository:${REGISTRY_REPO}-${app}:pull" \
+      | sed -E 's/.*"token":"([^"]+)".*/\1/')" || return 1
+    tags="$(curl -fsS --max-time 15 -H "Authorization: Bearer $token" \
+      "https://ghcr.io/v2/${REGISTRY_REPO}-${app}/tags/list?n=10000")" || return 1
+    found="$(grep -oE '"[0-9]+\.[0-9]+\.[0-9]+"' <<<"$tags" | tr -d '"' | sort -u || true)"
+    if [ "$app" = api ]; then
+      versions="$found"
+    else
+      versions="$(comm -12 <(printf '%s\n' "$versions") <(printf '%s\n' "$found"))"
+    fi
+  done
+  versions="$(printf '%s\n' "$versions" | sed '/^$/d' | sort -t. -k1,1n -k2,2n -k3,3n | tail -n 1)"
+  [ -n "$versions" ] || return 1
+  printf '%s\n' "$versions"
+}
+
+newest_release_or_die() {
+  local tag
+  tag="$(latest_release)" \
+    || die "Could not find the newest release on ghcr.io (network or registry unavailable). Pass --image-tag X.Y.Z to choose a version."
+  printf '%s\n' "$tag"
+}
+
+# A fresh install runs --image-tag, or else the newest release.
+choose_install_tag() {
+  [ -n "$IMAGE_TAG" ] && return 0
+  if [ -n "$SOURCE" ]; then
+    IMAGE_TAG="local"
+    return 0
+  fi
+  IMAGE_TAG="$(newest_release_or_die)"
+}
+
+# An update moves to the newest release unless --image-tag is given. It
+# refuses to move a newer installed version back to an older one, which can
+# only happen when a release was removed from the registry.
 choose_update_tag() {
-  local current
+  local current newest
   [ -n "$IMAGE_TAG" ] && return 0
   current="$(env_value IMAGE_TAG)"
-  if [[ "$current" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] && version_newer "$current" "$RELEASE_IMAGE_TAG"; then
-    die "This installer is v$SCRIPT_VERSION but the installation runs $current. Download the latest installer from $INSTALL_URL, or pass --image-tag to choose a version."
+  if [ -n "$SOURCE" ] || [ -f "$DIR/docker-compose.build.yml" ]; then
+    IMAGE_TAG="${current:-local}"
+    return 0
   fi
-  IMAGE_TAG="$RELEASE_IMAGE_TAG"
+  newest="$(newest_release_or_die)"
+  if [[ "$current" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] && version_newer "$current" "$newest"; then
+    die "The installation runs $current, which is newer than the newest release found ($newest). Pass --image-tag to choose a version."
+  fi
+  if [ "$current" = "$newest" ]; then
+    say "Already on the newest release, $newest. Pulling it again and restarting."
+  else
+    say "Updating from ${current:-an unknown version} to $newest."
+  fi
+  IMAGE_TAG="$newest"
 }
 
 do_update() {
@@ -1192,7 +1249,7 @@ menu() {
   local choice
   say "Operations"
   say "  1) fresh install"
-  say "  2) update to this installer's release (${RELEASE_IMAGE_TAG})"
+  say "  2) update to the newest release"
   say "  3) restart services"
   say "  4) reset (remove containers, images and data)"
   say "  5) show status"

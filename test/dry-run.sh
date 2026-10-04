@@ -30,6 +30,10 @@ assert_not_grep() {
   if grep -Eq -- "$2" "$1"; then fail "$3 (unexpected pattern present)"; else pass "$3"; fi
 }
 
+# The newest release on GHCR, as the installer would find it. Exported so every
+# run below, including the piped ones, uses it instead of the network.
+export RECV_LATEST_RELEASE=4.5.6
+
 run_installer() { # run_installer <output-file> <args...>
   local out="$1"; shift
   RECV_DRY_RUN=1 NO_COLOR=1 "$BASH_BIN" "$INSTALL" "$@" > "$out" 2>&1 </dev/null || {
@@ -71,8 +75,9 @@ assert_grep "$DIR/.env" "^ADMIN_API_KEY=[0-9a-f]{48}$" "ADMIN_API_KEY is 48 hex 
 assert_grep "$DIR/.env" "^POSTGRES_PASSWORD=[0-9a-f]{48}$" "POSTGRES_PASSWORD is 48 hex chars"
 assert_grep "$DIR/.env" "^REDIS_PASSWORD=[0-9a-f]{48}$" "REDIS_PASSWORD is 48 hex chars"
 assert_grep "$DIR/.env" "^POSTGRES_HOST=postgres$" "POSTGRES_HOST is the bundled container"
-release="$(sed -n 's/^SCRIPT_VERSION="\(.*\)"$/\1/p' "$INSTALL")"
-assert_grep "$DIR/.env" "^IMAGE_TAG=${release//./\\.}$" "IMAGE_TAG is the installer release ($release)"
+release="$RECV_LATEST_RELEASE"
+assert_grep "$DIR/.env" "^IMAGE_TAG=${release//./\\.}$" "IMAGE_TAG is the newest release ($release)"
+assert_grep "$OUT1" "version $release" "summary names the image version"
 
 assert_grep "$DIR/docker-compose.yml" "^      - '8080:80'$" "caddy maps host port 8080"
 assert_not_grep "$DIR/docker-compose.yml" "443" "no 443 mapping in HTTP mode"
@@ -128,10 +133,13 @@ OUT3="$DIR/run3.out"
 run_installer "$OUT3" --update --yes --dir "$DIR" --image-tag v1.2.3
 assert_grep "$DIR/.env" "^IMAGE_TAG=v1.2.3$" "--update --image-tag rewrites IMAGE_TAG"
 run_installer "$OUT3" --update --yes --dir "$DIR"
-assert_grep "$DIR/.env" "^IMAGE_TAG=${release//./\\.}$" "--update without a tag moves to the installer release"
+assert_grep "$DIR/.env" "^IMAGE_TAG=${release//./\\.}$" "--update without a tag moves to the newest release"
+assert_grep "$OUT3" "Updating from v1.2.3 to $release" "update names both versions"
+run_installer "$OUT3" --update --yes --dir "$DIR"
+assert_grep "$OUT3" "Already on the newest release, $release" "update on the newest release says so"
 sed -i.bak 's/^IMAGE_TAG=.*/IMAGE_TAG=99.0.0/' "$DIR/.env" && rm -f "$DIR/.env.bak"
 if RECV_DRY_RUN=1 NO_COLOR=1 "$BASH_BIN" "$INSTALL" --update --yes --dir "$DIR" > "$OUT3" 2>&1 </dev/null; then
-  fail "--update from an older installer must refuse to downgrade"
+  fail "--update must refuse to downgrade a newer installed version"
 else
   assert_grep "$OUT3" "installation runs 99.0.0" "--update refuses to downgrade a newer release"
 fi
