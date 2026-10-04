@@ -1,14 +1,33 @@
-# Push a tag vX.Y.Z to publish the installer. The release is refused unless
-# SCRIPT_VERSION in install.sh is X.Y.Z and the images it pins,
-# ghcr.io/recv-fund/recvfund-{api,web}:X.Y.Z, can be pulled without
-# credentials for amd64 and arm64. Assets: install.sh, update.sh, SHA256SUMS.
+# Every push to main that changes more than documentation publishes a new
+# installer release. The version is the highest vX.Y.Z tag with the patch
+# number increased by one (a manual run can bump the minor or major number).
+# A released version is never replaced: the run stops if the tag exists.
+#
+# The published install.sh is the commit's install.sh with SCRIPT_VERSION
+# set to the release version; on main it reads "dev". Image versions are not
+# tied to the installer: install.sh looks up the newest recvfund-server
+# release on GHCR when it runs. Assets: install.sh, update.sh, SHA256SUMS.
 # The newest release is always served at
 #   https://github.com/recv-fund/recvfund-scripts/releases/latest/download/install.sh
 name: release
 
 on:
   push:
-    tags: ['v*.*.*']
+    branches: [main]
+    paths-ignore:
+      - 'docs/**'
+      - '**/*.md'
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: Which part of the version to increase
+        type: choice
+        options: [patch, minor, major]
+        default: patch
+
+concurrency:
+  group: release
+  cancel-in-progress: false
 
 permissions:
   contents: write
@@ -18,10 +37,26 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Version matches the tag
+        with:
+          fetch-depth: 0
+      - name: Next version
+        env:
+          BUMP: ${{ inputs.bump || 'patch' }}
         run: |
-          version="$(sed -n 's/^SCRIPT_VERSION="\(.*\)"$/\1/p' install.sh)"
-          test "v$version" = "$GITHUB_REF_NAME" || { echo "install.sh is $version but the tag is $GITHUB_REF_NAME"; exit 1; }
+          git fetch --force --tags origin
+          last="$(git tag --list 'v[0-9]*.[0-9]*.[0-9]*' --sort=-v:refname | head -n 1)"
+          IFS=. read -r major minor patch <<< "${last#v}"
+          major="${major:-0}" minor="${minor:-0}" patch="${patch:-0}"
+          case "$BUMP" in
+            major) version="$((major + 1)).0.0" ;;
+            minor) version="$major.$((minor + 1)).0" ;;
+            *) version="$major.$minor.$((patch + 1))" ;;
+          esac
+          if git ls-remote --exit-code --tags origin "refs/tags/v$version" >/dev/null; then
+            echo "v$version already exists; a released version is never replaced." >&2
+            exit 1
+          fi
+          echo "Previous release: ${last:-none}. This release: $version."
           echo "VERSION=$version" >> "$GITHUB_ENV"
       - name: Checks
         run: |
@@ -29,17 +64,33 @@ jobs:
           shellcheck -x install.sh update.sh test/*.sh
           bash test/dry-run.sh
           bash test/health-result.sh
-      - name: Pinned images are public
-        run: bash test/published-images.sh "$VERSION"
+      - name: Newest images are public
+        run: |
+          # shellcheck disable=SC1091
+          newest="$(bash -c 'source ./install.sh; latest_release')"
+          bash test/published-images.sh "$newest"
+          echo "IMAGES=$newest" >> "$GITHUB_ENV"
+      - name: Build the release files
+        run: |
+          mkdir dist
+          sed "s/^SCRIPT_VERSION=\"dev\"$/SCRIPT_VERSION=\"$VERSION\"/" install.sh > dist/install.sh
+          grep -qx "SCRIPT_VERSION=\"$VERSION\"" dist/install.sh
+          test "$(bash dist/install.sh --version)" = "$VERSION"
+          cp update.sh dist/update.sh
+          (cd dist && sha256sum install.sh update.sh > SHA256SUMS)
       - name: Publish
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          sha256sum install.sh update.sh > SHA256SUMS
-          {
-            printf 'Installs ghcr.io/recv-fund/recvfund-api:%s and ghcr.io/recv-fund/recvfund-web:%s.\n\n' "$VERSION" "$VERSION"
-            printf '```bash\ncurl -fsSL https://github.com/recv-fund/recvfund-scripts/releases/download/%s/install.sh | sudo bash -s -- --testnet\n```\n\n' "$GITHUB_REF_NAME"
-            printf 'Verify downloaded files with `sha256sum -c SHA256SUMS`.\n'
-          } > notes.md
-          gh release create "$GITHUB_REF_NAME" install.sh update.sh SHA256SUMS \
-            --title "recv.fund installer $VERSION" --notes-file notes.md
+          git tag "v$VERSION" "$GITHUB_SHA"
+          git push origin "refs/tags/v$VERSION"
+          printf 'Installs the newest recv.fund release at the time it runs (%s when this installer was published). Pass --image-tag X.Y.Z to choose a version.\n\n' "$IMAGES" > notes.md
+          cat >> notes.md <<'NOTES'
+          ```bash
+          curl -fsSL https://github.com/recv-fund/recvfund-scripts/releases/latest/download/install.sh | sudo bash -s -- --testnet
+          ```
+
+          Verify downloaded files with `sha256sum -c SHA256SUMS`.
+          NOTES
+          gh release create "v$VERSION" dist/install.sh dist/update.sh dist/SHA256SUMS \
+            --verify-tag --title "recv.fund installer $VERSION" --notes-file notes.md
