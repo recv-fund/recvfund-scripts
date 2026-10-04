@@ -106,6 +106,23 @@ run_installer "$OUT2" --yes --testnet --dir "$DIR" --http-port 8080
 assert_grep "$OUT2" "An installation already exists" "existing install detected"
 assert_grep "$OUT2" "recv.fund updated" "update completed"
 
+printf 'Piped into bash, the way the public install command runs it\n'
+DIRP="$DIR/piped"
+OUTP="$DIR/piped.out"
+if RECV_DRY_RUN=1 NO_COLOR=1 "$BASH_BIN" -s -- --yes --testnet --http-port 8080 --dir "$DIRP" < "$INSTALL" > "$OUTP" 2>&1; then
+  pass "install.sh runs from stdin"
+else
+  fail "install.sh fails from stdin"; cat "$OUTP"
+fi
+assert_grep "$OUTP" "recv.fund installed" "piped install completes"
+OUTU="$DIR/piped-update.out"
+if RECV_DRY_RUN=1 NO_COLOR=1 RECV_INSTALL_URL="file://$INSTALL" "$BASH_BIN" -s -- --yes --dir "$DIRP" < "$ROOT/update.sh" > "$OUTU" 2>&1; then
+  pass "update.sh runs from stdin and fetches install.sh"
+else
+  fail "update.sh fails from stdin"; cat "$OUTU"
+fi
+assert_grep "$OUTU" "recv.fund updated" "piped update completes"
+
 printf -- '--update, --restart, --status\n'
 OUT3="$DIR/run3.out"
 run_installer "$OUT3" --update --yes --dir "$DIR" --image-tag v1.2.3

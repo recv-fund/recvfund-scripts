@@ -56,5 +56,5 @@ wait_healthy
 compose exec -T api node -e 'if(require("fs").readFileSync("uploads/smoke-persistence.txt", "utf8") !== "retained") process.exit(1)'
 # Replaying migrations must succeed against the running install.
 run_migrations
-printf 'Docker smoke passed (%s): migrations/seeds, API health, signup, uploads persistence and migration replay.\n' \
-  "${RECV_SMOKE_IMAGE_TAG:+published images $RECV_SMOKE_IMAGE_TAG}${RECV_SMOKE_IMAGE_TAG:-source build}"
+if [ -n "${RECV_SMOKE_IMAGE_TAG:-}" ]; then mode="published images $RECV_SMOKE_IMAGE_TAG"; else mode="source build"; fi
+printf 'Docker smoke passed (%s): migrations/seeds, API health, signup, uploads persistence and migration replay.\n' "$mode"
