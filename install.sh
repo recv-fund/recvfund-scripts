@@ -51,6 +51,10 @@ PG_SSL=""
 SSL_MODE=""          # letsencrypt | http
 HTTP_PORT=""
 HTTP_PORT_SET=0
+# Host address the plain-HTTP port is published on; empty means every interface.
+HTTP_BIND=""
+# --site-url: the public address in plain-HTTP mode, skipping the prompt.
+SITE_URL_FLAG=""
 IMAGE_TAG=""
 DIR="$DEFAULT_DIR"
 SOURCE=""
@@ -123,6 +127,10 @@ Options:
   --pg-password <pw>    External Postgres password (visible in the process list; prefer the prompt)
   --pg-ssl              Connect to the external Postgres with SSL
   --http-port <n>       Serve plain HTTP on this host port (behind your own proxy)
+  --http-bind <ip>      Publish that port on this address only, for example 127.0.0.1
+                        when the proxy runs on the same server (default: every address)
+  --site-url <url>      Public address in plain-HTTP mode, for example https://pay.example.com
+                        (default: prompt, suggesting http://<public ip>[:port])
   --image-tag <tag>     Image version to run (default: the newest released X.Y.Z)
   --dir <path>          Install directory (default ${DEFAULT_DIR})
   --source <path>       Build the images from a local recvfund-server checkout instead of pulling
@@ -274,7 +282,7 @@ while [ $# -gt 0 ]; do
     --yes|-y)  ASSUME_YES=1 ;;
     --external-db) DB_MODE=external ;;
     --pg-ssl)  PG_SSL=true ;;
-    --domain|--email|--pg-host|--pg-port|--pg-db|--pg-user|--pg-password|--http-port|--image-tag|--dir|--source)
+    --domain|--email|--pg-host|--pg-port|--pg-db|--pg-user|--pg-password|--http-port|--http-bind|--site-url|--image-tag|--dir|--source)
       if [ -z "$val" ]; then
         need_arg "$arg" "${2:-}"
         val="$2"
@@ -289,6 +297,8 @@ while [ $# -gt 0 ]; do
         --pg-user)     PG_USER="$val"; DB_MODE=external ;;
         --pg-password) PG_PASSWORD="$val"; DB_MODE=external ;;
         --http-port)   HTTP_PORT="$val"; HTTP_PORT_SET=1 ;;
+        --http-bind)   HTTP_BIND="$val" ;;
+        --site-url)    SITE_URL_FLAG="${val%/}" ;;
         --image-tag)   IMAGE_TAG="$val" ;;
         --dir)         DIR="$val" ;;
         --source)      SOURCE="$val" ;;
@@ -315,6 +325,17 @@ if [ "$HTTP_PORT_SET" = 1 ]; then
     ''|*[!0-9]*) die "--http-port must be a number" ;;
   esac
   if [ "$HTTP_PORT" -lt 1 ] || [ "$HTTP_PORT" -gt 65535 ]; then die "--http-port must be between 1 and 65535"; fi
+fi
+if [ -n "$SITE_URL_FLAG" ]; then
+  [ -z "$DOMAIN" ] || die "--site-url applies to plain HTTP only; with --domain the site URL is https://<domain>."
+  case "$SITE_URL_FLAG" in
+    http://*|https://*) ;;
+    *) die "--site-url must start with http:// or https://" ;;
+  esac
+fi
+if [ -n "$HTTP_BIND" ]; then
+  [ -z "$DOMAIN" ] || die "--http-bind applies to plain HTTP only and cannot be combined with --domain."
+  [[ "$HTTP_BIND" =~ ^[0-9]{1,3}(\.[0-9]{1,3}){3}$ ]] || die "--http-bind must be an IPv4 address, for example 127.0.0.1"
 fi
 if [ -n "$SOURCE" ]; then
   SOURCE="${SOURCE%/}"
@@ -537,14 +558,16 @@ set_env_value() {
 
 load_existing() {
   [ -f "$DIR/.env" ] || die "No installation found in $DIR (no .env). Run a fresh install first."
-  local host
+  local host mapping
   host="$(env_value POSTGRES_HOST)"
   if [ "$host" = postgres ]; then DB_MODE=bundled; else DB_MODE=external; fi
   SITE_URL="$(env_value SITE_URL)"
   SITE_DOMAIN="$(env_value SITE_DOMAIN)"
   if [ "$SITE_DOMAIN" = ":80" ]; then
     SSL_MODE=http
-    HTTP_PORT="$(grep -E "^      - '[0-9]+:80'$" "$DIR/docker-compose.yml" 2>/dev/null | head -n 1 | sed -E "s/.*'([0-9]+):80'.*/\1/")"
+    mapping="$(grep -E "^      - '([0-9.]+:)?[0-9]+:80'$" "$DIR/docker-compose.yml" 2>/dev/null | head -n 1 | sed -E "s/.*'(.*):80'.*/\1/")"
+    HTTP_PORT="${mapping##*:}"
+    if [ "$mapping" != "$HTTP_PORT" ]; then HTTP_BIND="${mapping%:*}"; fi
     [ -n "$HTTP_PORT" ] || HTTP_PORT=80
   else
     SSL_MODE=letsencrypt
@@ -690,10 +713,14 @@ choose_ssl() {
     ACME_EMAIL=""
     SITE_DOMAIN=":80"
     check_ports "$HTTP_PORT"
-    ip="$(public_ip)"
-    [ -n "$ip" ] || ip=localhost
-    if [ "$HTTP_PORT" = 80 ]; then default="http://${ip}"; else default="http://${ip}:${HTTP_PORT}"; fi
-    ask SITE_URL "Public site URL (as reached by browsers; editable later in Settings)" "$default"
+    if [ -n "$SITE_URL_FLAG" ]; then
+      SITE_URL="$SITE_URL_FLAG"
+    else
+      ip="$(public_ip)"
+      [ -n "$ip" ] || ip=localhost
+      if [ "$HTTP_PORT" = 80 ]; then default="http://${ip}"; else default="http://${ip}:${HTTP_PORT}"; fi
+      ask SITE_URL "Public site URL (as reached by browsers; editable later in Settings)" "$default"
+    fi
     SITE_URL="${SITE_URL%/}"
     case "$SITE_URL" in
       http://*|https://*) ;;
@@ -724,7 +751,7 @@ print_summary() {
   if [ "$SSL_MODE" = letsencrypt ]; then
     say "  HTTPS:         Let's Encrypt for $DOMAIN ($ACME_EMAIL)"
   else
-    say "  HTTPS:         none; plain HTTP on host port $HTTP_PORT"
+    say "  HTTPS:         none; plain HTTP on host port $HTTP_PORT${HTTP_BIND:+, address $HTTP_BIND only}"
   fi
   say "  Site URL:      $SITE_URL"
   if [ -n "$SOURCE" ]; then
@@ -784,7 +811,7 @@ render_compose() {
   while IFS= read -r line; do
     if [ "$SSL_MODE" = http ]; then
       case "$line" in
-        "      - '80:80'") line="      - '${HTTP_PORT}:80'" ;;
+        "      - '80:80'") line="      - '${HTTP_BIND:+$HTTP_BIND:}${HTTP_PORT}:80'" ;;
         "      - '443:443'"|"      - '443:443/udp'") continue ;;
       esac
     fi
@@ -1004,7 +1031,7 @@ health_url() {
   if [ "$SSL_MODE" = letsencrypt ]; then
     printf 'https://%s/api/v1/health' "$DOMAIN"
   else
-    printf 'http://127.0.0.1:%s/api/v1/health' "$HTTP_PORT"
+    printf 'http://%s:%s/api/v1/health' "${HTTP_BIND:-127.0.0.1}" "$HTTP_PORT"
   fi
 }
 

@@ -154,6 +154,23 @@ run_installer "$OUT3" --status --yes --dir "$DIR"
 assert_grep "$OUT3" "--profile db ps" "status runs ps"
 assert_grep "$OUT3" "would request http://127.0.0.1:8080/api/v1/health" "status requests health"
 
+printf -- '--http-bind publishes the port on one address only\n'
+DIRB="$DIR/bind"
+mkdir -p "$DIRB"
+OUTB="$DIR/runb.out"
+run_installer "$OUTB" --yes --testnet --dir "$DIRB" --http-port 8081 --http-bind 127.0.0.1 --site-url https://pay.example.com/
+assert_grep "$DIRB/.env" "^SITE_URL=https://pay\\.example\\.com$" "--site-url sets SITE_URL without the trailing slash"
+assert_grep "$DIRB/docker-compose.yml" "^      - '127\\.0\\.0\\.1:8081:80'$" "caddy maps 127.0.0.1:8081"
+assert_grep "$OUTB" "address 127\\.0\\.0\\.1 only" "summary names the bind address"
+assert_grep "$OUTB" "would poll http://127\\.0\\.0\\.1:8081/api/v1/health" "health poll on the bound address"
+run_installer "$OUTB" --update --yes --dir "$DIRB"
+assert_grep "$OUTB" "would poll http://127\\.0\\.0\\.1:8081/api/v1/health" "update reads the bound port back"
+if RECV_DRY_RUN=1 NO_COLOR=1 "$BASH_BIN" "$INSTALL" --yes --testnet --dir "$DIR/bind2" --http-port 8082 --http-bind localhost > "$OUTB" 2>&1 </dev/null; then
+  fail "--http-bind accepted a host name"
+else
+  assert_grep "$OUTB" "must be an IPv4 address" "--http-bind rejects a host name"
+fi
+
 printf 'Let'"'"'s Encrypt mode with an external database and --source\n'
 DIR2="$DIR/le"
 mkdir -p "$DIR2"
