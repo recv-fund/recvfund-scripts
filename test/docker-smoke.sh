@@ -171,3 +171,6 @@ compose exec -T api node - verify < "$ROOT/test/release-records.cjs"
 printf 'Passed: real failed migration rolled back its writes and left application services stopped\n'
 if [ -n "${RECV_SMOKE_IMAGE_TAG:-}" ]; then mode="published images $RECV_SMOKE_IMAGE_TAG"; else mode="source build"; fi
 printf 'Docker smoke passed (%s): install, OpenAPI, owner/customer/invoice, backup restore, update, upload persistence, migration replay and real pull/migration failure recovery.\n' "$mode"
+if [ "${RECV_SMOKE_KEEP:-0}" = 1 ] && [ -n "${GITHUB_OUTPUT:-}" ]; then
+  printf 'directory=%s\nproject=%s\nport=%s\n' "$SMOKE_DIR" "$SMOKE_PROJECT" "$SMOKE_PORT" >> "$GITHUB_OUTPUT"
+fi
