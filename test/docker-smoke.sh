@@ -117,8 +117,24 @@ END $$;
 SQL
 printf 'Passed: restricted paired backup restored real records and migration ledger\n'
 
+# Exercise the pre-0.1.16 proxy configuration instead of only a fresh template.
+cp "$DIR/Caddyfile" "$SMOKE_DIR/current-Caddyfile"
+awk '
+  /@api path/ { next }
+  /handle @api/ { sub(/handle @api/, "handle /api/*") }
+  /encode zstd gzip/ { print; print "\theader X-Recv-Smoke preserved"; next }
+  { print }
+' "$SMOKE_DIR/current-Caddyfile" > "$DIR/Caddyfile"
+start_services
+wait_healthy
+[ "$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:$SMOKE_PORT/api-json")" = 404 ] || die 'Legacy proxy did not reproduce missing API document'
+printf 'Reproduced: legacy proxy is healthy but API document returns 404\n'
 IMAGE_TAG="${RECV_SMOKE_UPDATE_TAG:-$previous_tag}"
 do_update
+curl -fsS -D "$SMOKE_DIR/upgraded-headers" "http://127.0.0.1:$SMOKE_PORT/api-json" > "$SMOKE_DIR/upgraded-openapi.json"
+grep -q '"openapi"' "$SMOKE_DIR/upgraded-openapi.json"
+grep -iq '^X-Recv-Smoke: preserved' "$SMOKE_DIR/upgraded-headers"
+printf 'Passed: legacy update restores OpenAPI and preserves custom proxy directives\n'
 compose exec -T api node - verify < "$ROOT/test/release-records.cjs"
 compose exec -T api node -e 'if(require("fs").readFileSync("uploads/smoke-persistence.txt", "utf8") !== "retained") process.exit(1)'
 
