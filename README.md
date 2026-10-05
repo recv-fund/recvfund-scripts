@@ -77,7 +77,7 @@ cd /opt/recvfund && sudo docker compose -p recvfund --profile db start
 Leave out `--profile db` with an external database; with the bundled database
 it is required, or the Postgres container keeps running.
 
-`--update` moves to the images of the installer you run. It refuses to move a
+`--update` selects the newest published images unless `--image-tag` is given. It refuses to move a
 newer installation back to an older version unless you pass `--image-tag`.
 `update.sh` from the same release is a shortcut for `install.sh --update`.
 
@@ -155,6 +155,7 @@ verification, known limitations and the next step to
 
 The generated Caddy configuration sends `/api`, `/api/*`, `/api-json` and
 `/api-yaml` to the API container, keeping Swagger and agent discovery on the
-same origin as checkout. Dashboard routes go to the web container. Installer
-syntax and matching rules are verified locally; install/update/TLS acceptance
-must still run against a release image on the target host.
+same origin as checkout. Dashboard routes go to the web container. The release
+smoke verifies legacy route migration and OpenAPI through real Caddy and
+published application images. TLS issuance still requires acceptance on the
+target host.

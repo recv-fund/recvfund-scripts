@@ -37,13 +37,22 @@ update, backup/restore and failure-recovery smoke against those images, writes t
 creates the release with `install.sh`, `update.sh` and `SHA256SUMS`. A manual
 run can bump the minor or major number.
 
+Pushes to `staging` run the same static checks and disposable release-image
+smoke through `ci.yml`, without publishing assets or tags. Keep a staging-only
+change on that branch until its promotion to `main` is authorized.
+
 ## When the Compose or Caddy template changes
 
-`--update` does not rewrite `docker-compose.yml` or `Caddyfile` on an existing
-installation. A server change that needs a template change (a new service,
-volume or environment key) needs the installer change merged as well, and
-existing installations need the template change applied by hand; describe it
-in the server release notes.
+`--update` does not rewrite `docker-compose.yml`. It migrates one recognized
+legacy Caddy API handler, `handle /api/* {`, to `handle @api {` with the exact
+matcher `@api path /api /api/* /api-json /api-yaml`. Indentation and unrelated
+custom directives are preserved. An already updated matcher/handler is kept.
+Unknown or ambiguous routing and invalid Caddy syntax are rejected before
+services stop or migrations begin. The candidate is checked with the installed
+Caddy image, then written after successful migrations with a mode-600
+`Caddyfile.before-update.*` backup. Other template changes (new services,
+volumes or environment keys) require manual review and must be described in
+the server release notes.
 
 ## After a release
 
