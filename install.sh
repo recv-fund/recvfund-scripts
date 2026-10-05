@@ -74,6 +74,7 @@ DOCKER=(docker)
 SUDO=""
 TTY_OK=0
 UPDATE_PHASE=""
+CADDY_UPDATE_FILE=""
 
 # ---------------------------------------------------------------------------
 # Output
@@ -96,6 +97,7 @@ die()  { printf '%sERROR:%s %s\n' "$C_RED" "$C_RESET" "$*" >&2; log_line "ERROR:
 
 on_exit() {
   local rc=$?
+  if [ -n "$CADDY_UPDATE_FILE" ]; then rm -f -- "$CADDY_UPDATE_FILE"; fi
   if [ "$rc" -ne 0 ] && [ "$UPDATE_PHASE" = migration ]; then
     printf 'Update stopped during migration. Application services remain stopped. The installed image tag is unchanged, but completed migrations may have changed the database. Restore the paired pre-update database/configuration backup or resolve the migration before starting services.\n' >&2
   fi
@@ -1197,6 +1199,57 @@ choose_update_tag() {
   IMAGE_TAG="$newest"
 }
 
+prepare_caddy_update() {
+  if [ ! -f "$DIR/Caddyfile" ] || [ -L "$DIR/Caddyfile" ]; then
+    die 'Expected a regular Caddyfile; review the proxy configuration before updating.'
+  fi
+  CADDY_UPDATE_FILE="$(mktemp "$DIR/.Caddyfile.update.XXXXXX")"
+  # Change only the known API handler, retaining the merchant's other directives.
+  if ! awk '
+    /^[[:space:]]*#/ { print; next }
+    /^[[:space:]]*handle \/api\/\* \{[[:space:]]*$/ {
+      legacy++
+      match($0, /^[[:space:]]*/); indent=substr($0, 1, RLENGTH)
+      print indent "@api path /api /api/* /api-json /api-yaml"
+      print indent "handle @api {"
+      next
+    }
+    /^[[:space:]]*@api path \/api \/api\/\* \/api-json \/api-yaml[[:space:]]*$/ { matcher++ }
+    /^[[:space:]]*handle @api \{[[:space:]]*$/ { handler++ }
+    /@api/ { references++ }
+    { print }
+    END {
+      if (!((legacy == 1 && references == 0) || (legacy == 0 && matcher == 1 && handler == 1 && references == 2))) exit 1
+    }
+  ' "$DIR/Caddyfile" > "$CADDY_UPDATE_FILE"; then
+    rm -f -- "$CADDY_UPDATE_FILE"
+    CADDY_UPDATE_FILE=""
+    die 'Unrecognized API proxy configuration. Add the /api, /api/*, /api-json and /api-yaml routes to the API upstream and review the Caddyfile before updating. No services or migrations were started.'
+  fi
+  info 'Validating the upgrade proxy configuration before stopping services'
+  if ! compose run --rm --no-deps -T --entrypoint caddy \
+    -v "$CADDY_UPDATE_FILE:/etc/caddy/Caddyfile:ro" caddy \
+    validate --adapter caddyfile --config /etc/caddy/Caddyfile; then
+    rm -f -- "$CADDY_UPDATE_FILE"
+    CADDY_UPDATE_FILE=""
+    die 'Candidate Caddy configuration is invalid. The original file and application are unchanged.'
+  fi
+}
+
+apply_caddy_update() {
+  local backup
+  if ! cmp -s "$DIR/Caddyfile" "$CADDY_UPDATE_FILE"; then
+    backup="$(mktemp "$DIR/Caddyfile.before-update.XXXXXX")"
+    cp "$DIR/Caddyfile" "$backup"
+    chmod 600 "$backup"
+    # Retain the inode so an existing single-file bind mount sees the new content.
+    cat "$CADDY_UPDATE_FILE" > "$DIR/Caddyfile"
+    say "Updated API proxy routes; previous Caddyfile saved to $backup"
+  fi
+  rm -f -- "$CADDY_UPDATE_FILE"
+  CADDY_UPDATE_FILE=""
+}
+
 do_update() {
   detect_os
   load_existing
@@ -1208,10 +1261,12 @@ do_update() {
   export IMAGE_TAG
   write_build_override
   fetch_images
+  prepare_caddy_update
   info "Stopping application services before database migrations"
   compose stop caddy web api
   UPDATE_PHASE=migration
   run_migrations
+  apply_caddy_update
   UPDATE_PHASE=""
   set_env_value IMAGE_TAG "$IMAGE_TAG"
   say "IMAGE_TAG set to $IMAGE_TAG"

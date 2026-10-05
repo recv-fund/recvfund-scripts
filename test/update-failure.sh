@@ -16,6 +16,7 @@ for failure in pull migration; do
     DIR="$2"; IMAGE_TAG=0.1.17
     detect_os() { :; }; load_existing() { :; }; ensure_dir() { :; }
     ensure_docker() { :; }; write_build_override() { :; }
+    SSL_MODE=http; render_caddyfile > "$DIR/Caddyfile"
     compose() { printf "%s\n" "$*" >> "$DIR/operations"; }
     start_services() { printf started >> "$DIR/started"; }
     wait_healthy() { :; }

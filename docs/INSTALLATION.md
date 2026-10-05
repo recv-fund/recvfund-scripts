@@ -65,8 +65,15 @@ migration leaves API, web and Caddy stopped and the installed tag unchanged.
 Earlier migrations may already have committed; the installer does not reverse
 schema changes or automatically restart older code. Take a database backup
 paired with `.env` before updating, then restore that pair or resolve the
-migration before restarting. Updates do not migrate custom
-Compose/Caddy templates. Review template changes when upgrading. Native/token
+migration before restarting. Before stopping services, updates prepare and
+validate the Caddy configuration in the real Caddy image. The recognized legacy
+`handle /api/*` handler becomes a named matcher for `/api`, `/api/*`, `/api-json`
+and `/api-yaml`. Other directives are preserved. The previous Caddyfile is
+saved as `Caddyfile.before-update.*` with mode 600, and the new configuration is
+written only after migrations succeed. Current recognized routes are left
+unchanged. Unrecognized routing, symbolic links and invalid custom Caddy syntax
+fail before service interruption or database migration; review these manually.
+Custom Compose templates still require manual review. Native/token
 watchers require configured programs and appropriate RPC providers; an installer
 health check alone does not establish payment readiness.
 

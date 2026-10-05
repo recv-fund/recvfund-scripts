@@ -138,6 +138,35 @@ printf 'Passed: legacy update restores OpenAPI and preserves custom proxy direct
 compose exec -T api node - verify < "$ROOT/test/release-records.cjs"
 compose exec -T api node -e 'if(require("fs").readFileSync("uploads/smoke-persistence.txt", "utf8") !== "retained") process.exit(1)'
 
+# Unknown routing and invalid custom directives must fail before a migration can run.
+cp "$DIR/Caddyfile" "$SMOKE_DIR/upgraded-Caddyfile"
+before_containers="$(compose ps --status running -q api web caddy)"
+for proxy_failure in unknown invalid; do
+  if [ "$proxy_failure" = unknown ]; then
+    sed 's/@api/@merchant_api/g' "$SMOKE_DIR/upgraded-Caddyfile" > "$DIR/Caddyfile"
+  else
+    awk '/encode zstd gzip/ { print "\trecv_smoke_invalid_directive" } { print }' \
+      "$SMOKE_DIR/upgraded-Caddyfile" > "$DIR/Caddyfile"
+  fi
+  cp "$DIR/Caddyfile" "$SMOKE_DIR/rejected-Caddyfile"
+  previous_tag="$(env_value IMAGE_TAG)"
+  set +e
+  (set -e; do_update) > "$SMOKE_DIR/proxy-$proxy_failure.log" 2>&1
+  failure_result=$?
+  set -e
+  [ "$failure_result" -ne 0 ] || die "Unsafe $proxy_failure proxy unexpectedly passed the update gate"
+  if grep -q 'Stopping application services\|Running migrations' "$SMOKE_DIR/proxy-$proxy_failure.log"; then
+    die "Unsafe $proxy_failure proxy reached service stop or database migration"
+  fi
+  cmp -s "$DIR/Caddyfile" "$SMOKE_DIR/rejected-Caddyfile" || die 'Rejected custom proxy was overwritten'
+  [ "$(env_value IMAGE_TAG)" = "$previous_tag" ] || die 'Rejected proxy changed installed image tag'
+  [ "$(compose ps --status running -q api web caddy)" = "$before_containers" ] || die 'Rejected proxy replaced application containers'
+  curl -fsS "http://127.0.0.1:$SMOKE_PORT/api/v1/health" > /dev/null
+  curl -fsS "http://127.0.0.1:$SMOKE_PORT/api-json" > /dev/null
+  cp "$SMOKE_DIR/upgraded-Caddyfile" "$DIR/Caddyfile"
+  printf 'Passed: %s custom proxy rejects before stopping services or migrating\n' "$proxy_failure"
+done
+
 # A real migration error must roll back that migration and leave the app stopped.
 mkdir "$SMOKE_DIR/failure"
 cat > "$SMOKE_DIR/failure/9999999999999-smoke-failure.js" <<'JS'

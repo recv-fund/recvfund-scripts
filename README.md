@@ -86,6 +86,11 @@ candidate first, then stop the application during migrations. A failed pull
 keeps the running application and saved version unchanged. A failed migration
 leaves the application stopped; restore the backup or resolve the migration
 before starting services. Earlier migrations may already have committed.
+The update validates Caddy before stopping services. It upgrades the legacy
+`handle /api/*` route to include `/api`, `/api-json` and `/api-yaml`, preserves
+unrelated custom directives, and saves the previous file with mode 600 as
+`Caddyfile.before-update.*`. Unrecognized routing or invalid Caddy syntax stops
+the update before migrations and leaves the installed configuration unchanged.
 
 For plain HTTP, the suggested site URL uses the address `api.ipify.org`
 reports. Behind a router or in a VM such as Lima, that address doesn't reach
@@ -124,15 +129,18 @@ embedded Compose file, Caddyfile and `.env` layout match the server's
 `test/docker-smoke.sh` needs a Docker daemon; it uses a unique Compose
 project on loopback port 18090 (`RECV_SMOKE_PORT`), creates a disposable owner,
 customer and unpaid invoice, verifies a restricted database/configuration
-backup restored into a separate database, updates the installation, and checks
-real pull and migration failures. It removes containers, volumes and temporary
+backup restored into a separate database, upgrades a legacy proxy while
+preserving custom headers, and checks real pull and migration failures.
+Unknown or invalid custom proxies must fail before services stop or migrations
+run. It removes containers, volumes and temporary
 files on exit. `RECV_SMOKE_KEEP=1` retains the fixture for local investigation;
 its `.env` and backup contain generated credentials and must stay private.
 `--source <recvfund-server checkout>` builds the images locally instead of
 pulling them.
 
 GitHub Actions runs static checks and a real Docker release smoke on every
-push and pull request (`ci.yml`). Publishing an installer also requires a
+push to `main` or `staging` and every pull request (`ci.yml`). Staging does not
+publish installer releases. Publishing an installer also requires a
 successful smoke test against the newest published images (`release.yml`).
 See [RELEASING.md](RELEASING.md).
 
