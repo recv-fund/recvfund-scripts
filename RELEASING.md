@@ -35,7 +35,8 @@ images are public (`test/published-images.sh`), runs the real Docker install,
 update, backup/restore and failure-recovery smoke against those images, writes the version into
 `SCRIPT_VERSION` of the published copy of `install.sh`, pushes the tag and
 creates the release with `install.sh`, `update.sh` and `SHA256SUMS`. A manual
-run can bump the minor or major number.
+run from `main` can bump the minor or major number. Dispatches from other
+branches skip publication.
 
 Pushes to `staging` run the same static checks and disposable release-image
 smoke through `ci.yml`, without publishing assets or tags. Keep a staging-only
