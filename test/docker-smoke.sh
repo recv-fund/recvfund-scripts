@@ -125,6 +125,7 @@ compose exec -T api node -e 'if(require("fs").readFileSync("uploads/smoke-persis
 # A real migration error must roll back that migration and leave the app stopped.
 mkdir "$SMOKE_DIR/failure"
 cat > "$SMOKE_DIR/failure/9999999999999-smoke-failure.js" <<'JS'
+Object.defineProperty(exports, '__esModule', { value: true });
 exports.default = class {
   async up(queryRunner) {
     await queryRunner.query('CREATE TABLE recv."SmokeMustRollback" ("Value" int)');
