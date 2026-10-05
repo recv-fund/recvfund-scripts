@@ -947,7 +947,8 @@ render_caddyfile() {
 {$SITE_DOMAIN} {
 	encode zstd gzip
 
-	handle /api/* {
+	@api path /api /api/* /api-json /api-yaml
+	handle @api {
 		reverse_proxy api:3001
 	}
 

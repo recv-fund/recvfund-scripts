@@ -127,3 +127,11 @@ Before finishing: commit small conventional changes as the global git author
 without trailers, keep README/docs true, and append a dated handover with
 verification, known limitations and the next step to
 `../recvfund-planning/PROGRESS.md`. Full rules: `../AGENTS.md`.
+
+## API documentation routing
+
+The generated Caddy configuration sends `/api`, `/api/*`, `/api-json` and
+`/api-yaml` to the API container, keeping Swagger and agent discovery on the
+same origin as checkout. Dashboard routes go to the web container. Installer
+syntax and matching rules are verified locally; install/update/TLS acceptance
+must still run against a release image on the target host.
