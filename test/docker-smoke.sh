@@ -154,7 +154,10 @@ set -e
 if [ "$failure_result" -eq 0 ]; then
   die 'Injected migration failure unexpectedly passed the update gate'
 fi
-grep -q 'Expected release smoke migration failure' "$SMOKE_DIR/migration-failure.log" || die 'Migration did not reach the injected failure'
+if ! grep -q 'Expected release smoke migration failure' "$SMOKE_DIR/migration-failure.log"; then
+  tail -40 "$SMOKE_DIR/migration-failure.log" >&2
+  die 'Migration did not reach the injected failure'
+fi
 for service in api web caddy; do
   [ -z "$(docker compose -p "$PROJECT" --env-file "$DIR/.env" -f "$DIR/docker-compose.yml" ps --status running -q "$service")" ] || die "$service still running after failed migration"
 done
