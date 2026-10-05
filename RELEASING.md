@@ -31,7 +31,8 @@ newest version on GHCR when it runs.
 Every push to `main` that changes more than documentation runs
 `.github/workflows/release.yml`: it takes the next patch version from this
 repository's tags, runs the checks and the dry run, confirms the newest
-images are public (`test/published-images.sh`), writes the version into
+images are public (`test/published-images.sh`), runs the real Docker install,
+update, backup/restore and failure-recovery smoke against those images, writes the version into
 `SCRIPT_VERSION` of the published copy of `install.sh`, pushes the tag and
 creates the release with `install.sh`, `update.sh` and `SHA256SUMS`. A manual
 run can bump the minor or major number.
@@ -51,6 +52,10 @@ in the server release notes.
   `scripts/check-installer.sh`.
 - `RECV_SMOKE_IMAGE_TAG=X.Y.Z bash test/docker-smoke.sh` installs a released
   version on a machine with Docker.
+- Server release pipelines can pin this public repository to an immutable
+  commit, then run `RECV_SMOKE_IMAGE_TAG=<baseline> RECV_SMOKE_UPDATE_TAG=sha-<commit>
+  bash test/docker-smoke.sh` to gate promotion on a real upgrade. The candidate
+  tag must already exist; failed smoke must block release promotion.
 
 ## First release of a new package only
 

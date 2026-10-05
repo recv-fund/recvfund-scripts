@@ -73,6 +73,7 @@ LOG_FILE=""
 DOCKER=(docker)
 SUDO=""
 TTY_OK=0
+UPDATE_PHASE=""
 
 # ---------------------------------------------------------------------------
 # Output
@@ -95,6 +96,9 @@ die()  { printf '%sERROR:%s %s\n' "$C_RED" "$C_RESET" "$*" >&2; log_line "ERROR:
 
 on_exit() {
   local rc=$?
+  if [ "$rc" -ne 0 ] && [ "$UPDATE_PHASE" = migration ]; then
+    printf 'Update stopped during migration. Application services remain stopped. The installed image tag is unchanged, but completed migrations may have changed the database. Restore the paired pre-update database/configuration backup or resolve the migration before starting services.\n' >&2
+  fi
   if [ "$rc" -ne 0 ] && [ -n "$LOG_FILE" ]; then
     printf 'The log is in %s\n' "$LOG_FILE" >&2
   fi
@@ -1050,7 +1054,7 @@ wait_healthy() {
     else
       body="$(curl -fsS --max-time 5 "$url" 2>/dev/null || true)"
     fi
-    if [ -n "$body" ]; then
+    if [[ "$body" =~ ^\{[[:space:]]*\"status\"[[:space:]]*:[[:space:]]*\"ok\"[[:space:]]*[,}] ]]; then
       ok "API healthy after ${waited}s"
       log_line "health: $body"
       return 0
@@ -1199,11 +1203,18 @@ do_update() {
   ensure_dir
   ensure_docker
   choose_update_tag
-  set_env_value IMAGE_TAG "$IMAGE_TAG"
-  say "IMAGE_TAG set to $IMAGE_TAG"
+  # Compose's process environment selects the candidate without publishing it
+  # as the installed version before its pull and migrations have succeeded.
+  export IMAGE_TAG
   write_build_override
   fetch_images
+  info "Stopping application services before database migrations"
+  compose stop caddy web api
+  UPDATE_PHASE=migration
   run_migrations
+  UPDATE_PHASE=""
+  set_env_value IMAGE_TAG "$IMAGE_TAG"
+  say "IMAGE_TAG set to $IMAGE_TAG"
   start_services
   wait_healthy
   say ""

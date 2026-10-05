@@ -58,8 +58,14 @@ removed. Installs built with `--source` keep their tag (`local` by default).
 on `main`; the release workflow writes the release version into the
 published asset.
 
-Updates preserve `.env`, set `IMAGE_TAG` as above, fetch/build images,
-run pending migrations/seeds and restart services. They do not migrate custom
+Updates preserve `.env`, fetch/build the candidate images, stop the application
+services, run pending migrations/seeds, then save `IMAGE_TAG` and start services.
+A failed pull leaves the original version and application running. A failed
+migration leaves API, web and Caddy stopped and the installed tag unchanged.
+Earlier migrations may already have committed; the installer does not reverse
+schema changes or automatically restart older code. Take a database backup
+paired with `.env` before updating, then restore that pair or resolve the
+migration before restarting. Updates do not migrate custom
 Compose/Caddy templates. Review template changes when upgrading. Native/token
 watchers require configured programs and appropriate RPC providers; an installer
 health check alone does not establish payment readiness.
@@ -77,6 +83,8 @@ path, so heredoc contents are parsed by Bash rather than extracted as fragments.
 Install, update and restart return a failure if the API health wait expires. A
 success banner is printed only after that wait succeeds. The regression script
 `test/health-result.sh` checks each operation with a failed health response.
+The response must begin with the health endpoint's `status: ok` JSON field;
+a successful HTTP response containing a proxy or maintenance page does not pass.
 
 
 The Docker smoke harness (`test/docker-smoke.sh`) calls the real install
@@ -90,6 +98,21 @@ With `RECV_SMOKE_IMAGE_TAG=X.Y.Z` it skips the source build: it first runs
 amd64 and arm64) and then installs from the published images. It does not
 test interactive prompts, TLS issuance, external PostgreSQL or public-network
 payments.
+
+The release smoke additionally creates an owner, customer and unpaid invoice
+through real HTTP APIs, verifies login after update, and checks exact decimal
+invoice data. With API/web/Caddy stopped, it writes a custom-format `pg_dump`
+and paired `.env` under a mode-700 directory with mode-600 files, restores the
+dump into a separate database, and verifies the customer, invoice and migration
+ledger. It injects a real migration that writes then fails, verifies PostgreSQL
+rolls those writes back and application services remain stopped, removes only
+that test fixture and proves the installation can restart. The backup is local
+and deleted by default; this test does not establish off-site backup retention.
+
+`RECV_SMOKE_UPDATE_TAG` tests upgrading the installed baseline to a different
+published candidate. `RECV_SMOKE_KEEP=1` retains a local fixture and prints its
+directory, Compose project and port for further investigation. Do not upload
+that directory as a CI artifact: it includes generated credentials and backups.
 
 The public command runs the script from a pipe (`curl … | sudo bash -s --`),
 where Bash provides no source file. Release 0.1.0 crashed in that case

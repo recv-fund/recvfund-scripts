@@ -35,6 +35,7 @@ permissions:
 jobs:
   release:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
         with:
@@ -64,12 +65,18 @@ jobs:
           shellcheck -x install.sh update.sh test/*.sh
           bash test/dry-run.sh
           bash test/health-result.sh
+          bash test/health-body.sh
+          bash test/update-failure.sh
       - name: Newest images are public
         run: |
           # shellcheck disable=SC1091
           newest="$(bash -c 'source ./install.sh; latest_release')"
           bash test/published-images.sh "$newest"
           echo "IMAGES=$newest" >> "$GITHUB_ENV"
+      - name: Verify released images through install and recovery
+        env:
+          RECV_SMOKE_IMAGE_TAG: ${{ env.IMAGES }}
+        run: bash test/docker-smoke.sh
       - name: Build the release files
         run: |
           mkdir dist

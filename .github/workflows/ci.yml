@@ -1,11 +1,17 @@
-# Static checks for every push and pull request. The Docker smoke test needs
-# a Docker daemon and published images, so it runs locally (README).
+# Static regressions and a disposable published-release installation.
 name: ci
 
 on:
   push:
     branches: [main]
   pull_request:
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: Published image version to install
+        default: '0.1.16'
+        required: true
+        type: string
 
 permissions:
   contents: read
@@ -22,4 +28,17 @@ jobs:
       - name: Dry run
         run: bash test/dry-run.sh
       - name: Health failure regression
-        run: bash test/health-result.sh
+        run: |
+          bash test/health-result.sh
+          bash test/health-body.sh
+          bash test/update-failure.sh
+  release-smoke:
+    needs: checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install, update, restore and failure recovery
+        env:
+          RECV_SMOKE_IMAGE_TAG: ${{ inputs.image_tag || '0.1.16' }}
+        run: bash test/docker-smoke.sh

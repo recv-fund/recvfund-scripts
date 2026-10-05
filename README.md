@@ -81,6 +81,12 @@ it is required, or the Postgres container keeps running.
 newer installation back to an older version unless you pass `--image-tag`.
 `update.sh` from the same release is a shortcut for `install.sh --update`.
 
+Take a paired database and `.env` backup before an update. Updates pull the
+candidate first, then stop the application during migrations. A failed pull
+keeps the running application and saved version unchanged. A failed migration
+leaves the application stopped; restore the backup or resolve the migration
+before starting services. Earlier migrations may already have committed.
+
 For plain HTTP, the suggested site URL uses the address `api.ipify.org`
 reports. Behind a router or in a VM such as Lima, that address doesn't reach
 the server. Answer the prompt with an address your browser can reach
@@ -103,8 +109,11 @@ bash -n install.sh update.sh test/*.sh
 shellcheck -x install.sh update.sh test/*.sh
 bash test/dry-run.sh                 # prints Docker commands instead of running them
 bash test/health-result.sh           # install/update/restart fail when the API is unhealthy
+bash test/health-body.sh             # reject maintenance pages and unhealthy JSON
+bash test/update-failure.sh          # failed pull/migration cannot publish a version
 bash test/docker-smoke.sh            # real install from a sibling recvfund-server checkout
 RECV_SMOKE_IMAGE_TAG=X.Y.Z bash test/docker-smoke.sh   # real install from the published images
+RECV_SMOKE_IMAGE_TAG=X.Y.Z RECV_SMOKE_UPDATE_TAG=sha-COMMIT bash test/docker-smoke.sh
 bash test/published-images.sh X.Y.Z  # the images can be pulled without credentials
 ```
 
@@ -113,13 +122,19 @@ The dry run writes only a temporary directory. With a sibling
 embedded Compose file, Caddyfile and `.env` layout match the server's
 `docker-compose.prod.yml`, `deploy/Caddyfile` and `deploy/.env.example`.
 `test/docker-smoke.sh` needs a Docker daemon; it uses a unique Compose
-project on loopback port 18090 (`RECV_SMOKE_PORT`), creates no owner, and
-removes its containers, volumes and temporary directory on exit.
+project on loopback port 18090 (`RECV_SMOKE_PORT`), creates a disposable owner,
+customer and unpaid invoice, verifies a restricted database/configuration
+backup restored into a separate database, updates the installation, and checks
+real pull and migration failures. It removes containers, volumes and temporary
+files on exit. `RECV_SMOKE_KEEP=1` retains the fixture for local investigation;
+its `.env` and backup contain generated credentials and must stay private.
 `--source <recvfund-server checkout>` builds the images locally instead of
 pulling them.
 
-GitHub Actions runs the static checks on every push (`ci.yml`) and publishes
-releases from version tags (`release.yml`). See [RELEASING.md](RELEASING.md).
+GitHub Actions runs static checks and a real Docker release smoke on every
+push and pull request (`ci.yml`). Publishing an installer also requires a
+successful smoke test against the newest published images (`release.yml`).
+See [RELEASING.md](RELEASING.md).
 
 ## Handover rule
 
